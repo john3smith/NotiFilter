@@ -1,5 +1,7 @@
 # NotiFilter
 
+[사용 설명서](USER_GUIDE.md) · [APK 다운로드](https://github.com/john3smith/NotiFilter/releases)
+
 Android 8.0 이상에서 앱별 포함 문구에 일치하는 알림을 게시 직후 자동으로 제거하는 로컬 앱입니다.
 
 ## 사용법
