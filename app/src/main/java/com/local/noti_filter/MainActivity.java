@@ -39,6 +39,9 @@ public final class MainActivity extends Activity {
     private static final int BG = Color.rgb(247, 249, 252);
     private RuleStore store;
     private LinearLayout root;
+    private Button addRuleButton;
+    private AlertDialog addRuleDialog;
+    private AlertDialog appPickerDialog;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -49,6 +52,13 @@ public final class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (root != null) render();
+    }
+
+    @Override protected void onDestroy() {
+        if (appPickerDialog != null) appPickerDialog.dismiss();
+        if (addRuleDialog != null) addRuleDialog.dismiss();
+        addRuleButton = null;
+        super.onDestroy();
     }
 
     private int dp(int value) { return Math.round(getResources().getDisplayMetrics().density * value); }
@@ -140,6 +150,8 @@ public final class MainActivity extends Activity {
         TextView header = text("차단 규칙", 20, INK, true);
         ruleHeader.addView(header, new LinearLayout.LayoutParams(0, -2, 1));
         Button add = button("+ 규칙 추가", true);
+        addRuleButton = add;
+        add.setEnabled(addRuleDialog == null);
         ruleHeader.addView(add, new LinearLayout.LayoutParams(-2, dp(44)));
         root.addView(ruleHeader);
         add.setOnClickListener(v -> showAddDialog());
@@ -212,6 +224,8 @@ public final class MainActivity extends Activity {
     }
 
     private void showAddDialog() {
+        // Ignore queued/repeated clicks while this Activity owns an add dialog.
+        if (addRuleDialog != null || isFinishing() || isDestroyed()) return;
         List<AppOption> apps = installedApps();
         final AppOption[] selected = {apps.get(0)};
         LinearLayout content = new LinearLayout(this);
@@ -233,7 +247,21 @@ public final class MainActivity extends Activity {
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle("차단 규칙 추가")
                 .setView(content).setNegativeButton("취소", null)
                 .setPositiveButton("추가", null).create();
+        addRuleDialog = dialog;
+        if (addRuleButton != null) addRuleButton.setEnabled(false);
+        // Rapid taps at the original Add location must not cancel/reopen it.
+        // Explicit Cancel and the Android Back button still close the dialog.
+        dialog.setCanceledOnTouchOutside(false);
+        dialog.setOnDismissListener(ignored -> {
+            if (addRuleDialog == dialog) {
+                if (appPickerDialog != null) appPickerDialog.dismiss();
+                addRuleDialog = null;
+                if (addRuleButton != null) addRuleButton.setEnabled(true);
+            }
+        });
         dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            // A queued second positive click after dismissal must not save twice.
+            if (addRuleDialog != dialog || !dialog.isShowing()) return;
             String value = phrase.getText().toString().trim();
             if (TextUtils.isEmpty(value)) {
                 phrase.setError("문구를 입력해 주세요");
@@ -261,6 +289,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showAppPicker(List<AppOption> apps, AppSelection onSelected) {
+        if (appPickerDialog != null || addRuleDialog == null || isFinishing() || isDestroyed()) return;
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(dp(12), dp(4), dp(12), 0);
@@ -283,7 +312,13 @@ public final class MainActivity extends Activity {
                 .setView(layout)
                 .setNegativeButton("취소", null)
                 .create();
+        appPickerDialog = picker;
+        picker.setCanceledOnTouchOutside(false);
+        picker.setOnDismissListener(ignored -> {
+            if (appPickerDialog == picker) appPickerDialog = null;
+        });
         list.setOnItemClickListener((parent, view, position, id) -> {
+            if (appPickerDialog != picker || !picker.isShowing()) return;
             onSelected.select(adapter.getItem(position));
             picker.dismiss();
         });
