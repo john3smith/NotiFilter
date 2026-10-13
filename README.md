@@ -1,5 +1,12 @@
 # NotiFilter
 
+## HTML 사용 설명서
+
+[기능 소개 · 설치 · 사용법 · 문제 해결 (HTML)](docs/user-guide.html)
+
+HTML 파일을 다운로드한 뒤 브라우저에서 열어 주세요. GitHub 파일 화면에서는 소스가 보일 수 있습니다.
+설명서 기준 버전과 설치 APK/EXE·Release 버전은 다를 수 있으므로 문서의 버전 안내를 확인하세요.
+
 [사용 설명서](USER_GUIDE.md) · [APK 다운로드](https://github.com/john3smith/NotiFilter/releases)
 
 Android 8.0 이상에서 앱별 포함 문구에 일치하는 알림을 게시 직후 자동으로 제거하는 로컬 앱입니다.
