@@ -42,6 +42,7 @@ public final class MainActivity extends Activity {
     private Button addRuleButton;
     private AlertDialog addRuleDialog;
     private AlertDialog appPickerDialog;
+    private AlertDialog ruleHelpDialog;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -55,6 +56,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        if (ruleHelpDialog != null) ruleHelpDialog.dismiss();
         if (appPickerDialog != null) appPickerDialog.dismiss();
         if (addRuleDialog != null) addRuleDialog.dismiss();
         addRuleButton = null;
@@ -237,9 +239,22 @@ public final class MainActivity extends Activity {
             selected[0] = option;
             choose.setText("대상 앱: " + option.label + "  ▾");
         }));
+        LinearLayout phraseHeader = new LinearLayout(this);
+        phraseHeader.setGravity(Gravity.CENTER_VERTICAL);
+        phraseHeader.addView(text("포함 문구 · , AND / ; OR", 14, MUTED, false),
+                new LinearLayout.LayoutParams(0, -2, 1));
+        TextView help = text("?", 19, MUTED, true);
+        help.setGravity(Gravity.CENTER);
+        help.setBackground(shape(Color.rgb(235, 239, 245), 22));
+        help.setContentDescription("문구 조건과 AND OR 우선순위 도움말");
+        help.setOnClickListener(v -> showRuleHelp());
+        phraseHeader.addView(help, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1, -2);
+        hp.topMargin = dp(12);
+        content.addView(phraseHeader, hp);
         EditText phrase = new EditText(this);
         phrase.setSingleLine(true);
-        phrase.setHint("포함 문구 입력");
+        phrase.setHint("예: 택배,배송;배달,완료");
         phrase.setTextSize(16);
         LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(-1, dp(58));
         ep.topMargin = dp(12);
@@ -255,6 +270,7 @@ public final class MainActivity extends Activity {
         dialog.setOnDismissListener(ignored -> {
             if (addRuleDialog == dialog) {
                 if (appPickerDialog != null) appPickerDialog.dismiss();
+                if (ruleHelpDialog != null) ruleHelpDialog.dismiss();
                 addRuleDialog = null;
                 if (addRuleButton != null) addRuleButton.setEnabled(true);
             }
@@ -265,6 +281,10 @@ public final class MainActivity extends Activity {
             String value = phrase.getText().toString().trim();
             if (TextUtils.isEmpty(value)) {
                 phrase.setError("문구를 입력해 주세요");
+                return;
+            }
+            if (!RuleMatcher.isValidExpression(value)) {
+                phrase.setError("구분자 앞뒤에 문구를 입력해 주세요. 빈 조건은 사용할 수 없습니다.");
                 return;
             }
             List<Rule> rules = store.load();
@@ -279,6 +299,35 @@ public final class MainActivity extends Activity {
             render();
         }));
         dialog.show();
+    }
+
+    private void showRuleHelp() {
+        if (ruleHelpDialog != null || isFinishing() || isDestroyed()) return;
+        AlertDialog help = new AlertDialog.Builder(this)
+                .setTitle("문구 조건 사용법")
+                .setMessage("알림의 제목·본문 등에서 문구 포함 여부를 검사합니다.\n\n"
+                        + "쉼표 , = AND (모두 포함)\n"
+                        + "예: 택배,배송 → ‘택배’와 ‘배송’이 모두 있어야 차단합니다.\n\n"
+                        + "세미콜론 ; = OR (하나 이상 포함)\n"
+                        + "예: 광고;이벤트 → ‘광고’ 또는 ‘이벤트’가 있으면 차단합니다.\n\n"
+                        + "혼합 시 AND가 OR보다 먼저 적용됩니다.\n"
+                        + "예: 택배,배송;배달,완료\n"
+                        + "→ (택배 AND 배송) OR (배달 AND 완료)\n"
+                        + "예: 광고;결제,승인\n"
+                        + "→ 광고 OR (결제 AND 승인)\n"
+                        + "단어 순서는 상관없으며 같은 알림 안에 포함되면 됩니다.\n\n"
+                        + "문구 앞뒤 공백은 무시하고 영문 대소문자는 구분하지 않습니다. "
+                        + "문구 안의 띄어쓰기는 그대로 비교합니다.\n"
+                        + "빈 조건(예: 광고,,이벤트 / 광고;)은 저장할 수 없습니다.\n"
+                        + "반각 , 와 ; 만 구분자입니다. 괄호·정규식·구분자 자체 검색은 지원하지 않습니다.\n"
+                        + "구분자 없는 기존 문구는 이전처럼 포함 검색합니다. "
+                        + "기존 규칙에 , 또는 ;가 있으면 이제 조건 구분자로 해석됩니다.")
+                .setPositiveButton("확인", null).create();
+        ruleHelpDialog = help;
+        help.setOnDismissListener(ignored -> {
+            if (ruleHelpDialog == help) ruleHelpDialog = null;
+        });
+        help.show();
     }
 
     private interface AppSelection { void select(AppOption option); }
