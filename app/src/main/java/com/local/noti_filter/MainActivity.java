@@ -207,10 +207,6 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-1, -2);
         pp.topMargin = dp(5);
         names.addView(phrase, pp);
-        TextView editHint = text("터치하여 수정", 12, BLUE, false);
-        LinearLayout.LayoutParams ehp = new LinearLayout.LayoutParams(-1, -2);
-        ehp.topMargin = dp(5);
-        names.addView(editHint, ehp);
         row.addView(names, new LinearLayout.LayoutParams(0, -2, 1));
         Switch enabled = new Switch(this);
         enabled.setChecked(rule.enabled);
