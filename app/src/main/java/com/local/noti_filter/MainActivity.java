@@ -189,6 +189,15 @@ public final class MainActivity extends Activity {
 
     private void addRuleCard(Rule rule) {
         LinearLayout box = card();
+        box.setOnClickListener(v -> {
+            // A switch may have changed since this card was rendered.
+            for (Rule current : store.load()) {
+                if (current.id == rule.id) {
+                    showRuleDialog(current);
+                    return;
+                }
+            }
+        });
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout names = new LinearLayout(this);
@@ -198,6 +207,10 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-1, -2);
         pp.topMargin = dp(5);
         names.addView(phrase, pp);
+        TextView editHint = text("터치하여 수정", 12, BLUE, false);
+        LinearLayout.LayoutParams ehp = new LinearLayout.LayoutParams(-1, -2);
+        ehp.topMargin = dp(5);
+        names.addView(editHint, ehp);
         row.addView(names, new LinearLayout.LayoutParams(0, -2, 1));
         Switch enabled = new Switch(this);
         enabled.setChecked(rule.enabled);
@@ -226,14 +239,31 @@ public final class MainActivity extends Activity {
     }
 
     private void showAddDialog() {
-        // Ignore queued/repeated clicks while this Activity owns an add dialog.
+        showRuleDialog(null);
+    }
+
+    private void showRuleDialog(Rule original) {
+        // Add and edit share one dialog owner, including rapid repeated taps.
         if (addRuleDialog != null || isFinishing() || isDestroyed()) return;
+        final boolean editing = original != null;
         List<AppOption> apps = installedApps();
         final AppOption[] selected = {apps.get(0)};
+        if (editing && !original.packageName.isEmpty()) {
+            // Retain the scope even if the app was uninstalled or has no launcher.
+            selected[0] = new AppOption(original.packageName,
+                    original.appName.isEmpty() ? original.packageName : original.appName,
+                    getDrawable(R.drawable.app_icon));
+            for (AppOption option : apps) {
+                if (option.packageName.equals(original.packageName)) {
+                    selected[0] = option;
+                    break;
+                }
+            }
+        }
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(22), dp(12), dp(22), 0);
-        Button choose = button("대상 앱: 모든 앱  ▾", false);
+        Button choose = button("대상 앱: " + selected[0].label + "  ▾", false);
         content.addView(choose, new LinearLayout.LayoutParams(-1, dp(48)));
         choose.setOnClickListener(v -> showAppPicker(apps, option -> {
             selected[0] = option;
@@ -256,12 +286,16 @@ public final class MainActivity extends Activity {
         phrase.setSingleLine(true);
         phrase.setHint("예: 택배,배송;배달,완료");
         phrase.setTextSize(16);
+        if (editing) {
+            phrase.setText(original.phrase);
+            phrase.setSelection(phrase.length());
+        }
         LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(-1, dp(58));
         ep.topMargin = dp(12);
         content.addView(phrase, ep);
-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("차단 규칙 추가")
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle(editing ? "차단 규칙 수정" : "차단 규칙 추가")
                 .setView(content).setNegativeButton("취소", null)
-                .setPositiveButton("추가", null).create();
+                .setPositiveButton(editing ? "저장" : "추가", null).create();
         addRuleDialog = dialog;
         if (addRuleButton != null) addRuleButton.setEnabled(false);
         // Rapid taps at the original Add location must not cancel/reopen it.
@@ -288,13 +322,33 @@ public final class MainActivity extends Activity {
                 return;
             }
             List<Rule> rules = store.load();
-            Rule newRule = new Rule(System.currentTimeMillis(), selected[0].packageName, selected[0].label, value, true);
-            rules.add(newRule);
+            Rule savedRule;
+            if (editing) {
+                int index = -1;
+                for (int i = 0; i < rules.size(); i++) {
+                    if (rules.get(i).id == original.id) { index = i; break; }
+                }
+                if (index < 0) {
+                    dialog.dismiss();
+                    Toast.makeText(this, "규칙이 없어 수정할 수 없습니다", Toast.LENGTH_LONG).show();
+                    render();
+                    return;
+                }
+                savedRule = new Rule(original.id, selected[0].packageName, selected[0].label,
+                        value, rules.get(index).enabled);
+                rules.set(index, savedRule);
+            } else {
+                savedRule = new Rule(System.currentTimeMillis(), selected[0].packageName,
+                        selected[0].label, value, true);
+                rules.add(savedRule);
+            }
             store.save(rules);
             dialog.dismiss();
-            int existing = FilterService.clearExistingForNewRule(newRule);
-            String message = existing < 0 ? "규칙 추가됨 · 기존 알림 확인에는 알림 접근이 필요합니다"
-                    : "규칙 추가됨 · 기존 알림 " + existing + "개 삭제 요청";
+            int existing = savedRule.enabled ? FilterService.clearExistingForNewRule(savedRule) : 0;
+            String result = editing ? "규칙 수정됨" : "규칙 추가됨";
+            String message = !savedRule.enabled ? result + " · 비활성 상태 유지"
+                    : existing < 0 ? result + " · 기존 알림 확인에는 알림 접근이 필요합니다"
+                    : result + " · 기존 알림 " + existing + "개 삭제 요청";
             Toast.makeText(this, message, Toast.LENGTH_LONG).show();
             render();
         }));
