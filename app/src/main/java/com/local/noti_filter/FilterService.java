@@ -16,6 +16,8 @@ import android.os.SystemClock;
 
 public final class FilterService extends NotificationListenerService {
     private static WeakReference<FilterService> connected = new WeakReference<>(null);
+    private RuleStore rules;
+    @Override public void onCreate() { super.onCreate(); rules = new RuleStore(this); }
     private final Map<String, Pending> pending = new HashMap<>();
     private static final class Pending {
         final String pkg, text;
@@ -45,7 +47,7 @@ public final class FilterService extends NotificationListenerService {
 
     @Override public void onNotificationPosted(StatusBarNotification sbn) {
         if (sbn == null || getPackageName().equals(sbn.getPackageName())) return;
-        RuleStore store = new RuleStore(this);
+        RuleStore store = rules;
         if (store.isPaused()) return;
         if (matches(store.load(), sbn)) requestRemoval(sbn);
     }
@@ -84,13 +86,13 @@ public final class FilterService extends NotificationListenerService {
 
     public static int clearExistingForEnabledRules() {
         FilterService service = connected.get();
-        return service == null ? -1 : clearExisting(new RuleStore(service).load());
+        return service == null ? -1 : clearExisting(service.rules.load());
     }
 
     private static int clearExisting(List<Rule> rules) {
         FilterService service = connected.get();
         if (service == null) return -1;
-        if (new RuleStore(service).isPaused()) return 0;
+        if (service.rules.isPaused()) return 0;
         StatusBarNotification[] active;
         try {
             active = service.getActiveNotifications();

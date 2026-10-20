@@ -13,6 +13,8 @@ public final class RuleStore {
     private static final String KEY_RULES = "rules";
     private static final String KEY_PAUSED = "paused";
     private final SharedPreferences prefs;
+    private String cachedJson;
+    private List<Rule> cachedRules;
 
     public RuleStore(Context context) {
         prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -21,10 +23,12 @@ public final class RuleStore {
     public boolean isPaused() { return prefs.getBoolean(KEY_PAUSED, false); }
     public void setPaused(boolean value) { prefs.edit().putBoolean(KEY_PAUSED, value).apply(); }
 
-    public List<Rule> load() {
+    public synchronized List<Rule> load() {
+        String encoded = prefs.getString(KEY_RULES, "[]");
+        if (encoded.equals(cachedJson) && cachedRules != null) return new ArrayList<>(cachedRules);
         List<Rule> result = new ArrayList<>();
         try {
-            JSONArray array = new JSONArray(prefs.getString(KEY_RULES, "[]"));
+            JSONArray array = new JSONArray(encoded);
             for (int i = 0; i < array.length(); i++) {
                 JSONObject item = array.getJSONObject(i);
                 result.add(new Rule(item.getLong("id"), item.optString("package"),
@@ -32,8 +36,10 @@ public final class RuleStore {
             }
         } catch (JSONException ignored) {
             // An invalid local record must never cause unrelated notifications to be removed.
-            return new ArrayList<>();
+            result.clear();
         }
+        cachedJson = encoded;
+        cachedRules = new ArrayList<>(result);
         return result;
     }
 
