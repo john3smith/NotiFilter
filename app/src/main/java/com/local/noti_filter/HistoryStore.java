@@ -28,11 +28,30 @@ public final class HistoryStore extends SQLiteOpenHelper {
         if (instance == null) instance = new HistoryStore(context.getApplicationContext());
         return instance;
     }
-    private HistoryStore(Context context) { super(context, "notification_history.db", null, 1); }
+    private HistoryStore(Context context) { super(context, "notification_history.db", null, 2); }
+    @Override public void onConfigure(SQLiteDatabase db) {
+        try (Cursor cursor = db.rawQuery("PRAGMA secure_delete=ON", null)) {
+            if (!cursor.moveToFirst() || cursor.getInt(0) != 1)
+                throw new IllegalStateException("Secure deletion unavailable");
+        }
+    }
     @Override public void onCreate(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE history (id INTEGER PRIMARY KEY AUTOINCREMENT, removed_at INTEGER NOT NULL, package_name TEXT NOT NULL, app_name TEXT NOT NULL, content TEXT NOT NULL, icon BLOB)");
     }
-    @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {}
+    @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if (oldVersion < 2) {
+            // SQLiteOpenHelper wraps upgrades in a transaction: failed encryption
+            // rolls back the entire migration rather than dropping any history.
+            try (Cursor cursor = db.query("history", new String[]{"id", "content"},
+                    null, null, null, null, null)) {
+                while (cursor.moveToNext()) {
+                    ContentValues values = new ContentValues();
+                    values.put("content", HistoryCipher.encrypt(cursor.getString(1)));
+                    db.update("history", values, "id=?", new String[]{Long.toString(cursor.getLong(0))});
+                }
+            }
+        }
+    }
 
     public void record(long removedAt, String pkg, String app, String content, Drawable icon) {
         IO.execute(() -> {
@@ -52,7 +71,7 @@ public final class HistoryStore extends SQLiteOpenHelper {
                 }
                 ContentValues values = new ContentValues();
                 values.put("removed_at", removedAt); values.put("package_name", pkg);
-                values.put("app_name", app); values.put("content", content); values.put("icon", bytes);
+                values.put("app_name", app); values.put("content", HistoryCipher.encrypt(content)); values.put("icon", bytes);
                 SQLiteDatabase db = getWritableDatabase();
                 db.beginTransaction();
                 try {
@@ -73,11 +92,14 @@ public final class HistoryStore extends SQLiteOpenHelper {
                     entries.add(new Entry(cursor.getLong(cursor.getColumnIndexOrThrow("removed_at")),
                             cursor.getString(cursor.getColumnIndexOrThrow("package_name")),
                             cursor.getString(cursor.getColumnIndexOrThrow("app_name")),
-                            cursor.getString(cursor.getColumnIndexOrThrow("content")),
+                            HistoryCipher.decrypt(cursor.getString(cursor.getColumnIndexOrThrow("content"))),
                             icon == null ? null : BitmapFactory.decodeByteArray(icon, 0, icon.length)));
                 }
                 MAIN.post(() -> success.accept(entries));
-            } catch (RuntimeException error) { MAIN.post(failure); }
+            } catch (RuntimeException error) {
+                Log.w("NotiFilter", "History load failed: " + error.getClass().getSimpleName());
+                MAIN.post(failure);
+            }
         });
     }
     public static final class Entry {

@@ -48,3 +48,12 @@ Android 8.0 이상에서 앱별 포함 문구에 일치하는 알림을 게시 �
 `gradlew.bat testDebugUnitTest lintDebug assembleDebug`
 
 APK: `app/build/outputs/apk/debug/app-debug.apk`
+
+
+## 1.0.7 security update
+
+- Notification history bodies use AES-GCM with an Android Keystore key. Existing version-1 rows migrate atomically without changing their displayed content, timestamps, packages or row IDs. Encryption failure does not fall back to plaintext.
+- Release APKs are non-debuggable; backup remains disabled. App names, package names, timestamps and icons remain local database metadata. History keeps its existing 1,000-row limit.
+- The release currently keeps the existing debug signing certificate for data-preserving updates. Non-debuggable does not mean a new production signing identity; a future signing-key migration needs a compatible rotation plan.
+- Migration uses SQLite secure_delete. This does not promise forensic erasure of old OS backups, filesystem snapshots, or externally copied databases.
+- Verified on the regular API 35 emulator: existing 13 histories retained, metadata unchanged, displayed text identical, all old plaintext bodies absent from migrated DB; a newly filtered synthetic notification was also stored as ciphertext.

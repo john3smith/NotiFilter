@@ -7,10 +7,18 @@ android {
         applicationId 'com.local.noti_filter'
         minSdk 26
         targetSdk 35
-        versionCode 7
-        versionName '1.0.6'
+        versionCode 8
+        versionName '1.0.7'
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    buildTypes {
+        release {
+            debuggable false
+            // Preserve the certificate used by existing installed APKs.
+            // This is a compatibility release, not a new production key identity.
+            signingConfig signingConfigs.debug
+        }
+    }
 }
 
 dependencies { testImplementation 'junit:junit:4.13.2' }
