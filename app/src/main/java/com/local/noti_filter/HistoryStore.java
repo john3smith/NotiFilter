@@ -83,6 +83,18 @@ public final class HistoryStore extends SQLiteOpenHelper {
         });
     }
 
+    public void clear(Runnable success, Runnable failure) {
+        IO.execute(() -> {
+            try {
+                getWritableDatabase().delete("history", null, null);
+                MAIN.post(success);
+            } catch (RuntimeException error) {
+                Log.w("NotiFilter", "History deletion failed");
+                MAIN.post(failure);
+            }
+        });
+    }
+
     public void load(Consumer<List<Entry>> success, Runnable failure) {
         IO.execute(() -> {
             List<Entry> entries = new ArrayList<>();

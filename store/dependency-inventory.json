@@ -1,0 +1,6 @@
+{
+  "scope": "Resolved Android runtime dependencies; host build/test tools excluded",
+  "dependencies": [],
+  "artifacts_without_embedded_notices": [],
+  "native_payload_review_complete": null
+}

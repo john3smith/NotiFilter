@@ -100,6 +100,11 @@ public final class MainActivity extends Activity {
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(20), dp(28), dp(20), dp(28));
+        root.setOnApplyWindowInsetsListener((view, insets) -> {
+            view.setPadding(dp(20), dp(28) + insets.getSystemWindowInsetTop(),
+                    dp(20), dp(28) + insets.getSystemWindowInsetBottom());
+            return insets;
+        });
         scroll.addView(root);
         setContentView(scroll);
 
@@ -109,6 +114,7 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(-1, -2);
         tp.topMargin = dp(5);
         root.addView(title, tp);
+        StoreInfo.addButton(this, root);
         TextView subtitle = text("원하는 앱과 문구를 선택하면 일치하는 알림을 자동으로 지웁니다.", 14, MUTED, false);
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, -2);
         sp.topMargin = dp(8); sp.bottomMargin = dp(22);
@@ -125,7 +131,17 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams sbp = new LinearLayout.LayoutParams(-1, dp(48));
         sbp.topMargin = dp(14);
         access.addView(settings, sbp);
-        settings.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
+        settings.setOnClickListener(v -> new AlertDialog.Builder(this)
+                .setTitle("알림 접근 권한 사용 안내")
+                .setMessage("규칙 검사를 위해 알림의 앱·제목·본문을 읽고, 일치하는 알림을 제거합니다. 삭제한 알림 내용은 기기 내부 이력에 최대 1,000개 저장하며 이력 화면에서 지울 수 있습니다. 개발자 서버로 전송하지 않습니다. 권한을 거부하면 자동 필터만 사용할 수 없으며 Android 설정에서 언제든 해제할 수 있습니다.")
+                .setNegativeButton("취소", null)
+                .setNeutralButton("개인정보 안내", (dialog, which) -> StoreInfo.show(this))
+                .setPositiveButton("동의하고 설정 열기", (dialog, which) -> {
+                    try { startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)); }
+                    catch (android.content.ActivityNotFoundException unavailable) {
+                        Toast.makeText(this, "이 기기에서 알림 접근 설정을 열 수 없습니다.", Toast.LENGTH_SHORT).show();
+                    }
+                }).show());
 
         LinearLayout control = card();
         LinearLayout controlRow = new LinearLayout(this);

@@ -1,0 +1,6 @@
+Third-party runtime notices
+Generated from the resolved dependency artifacts, 2026-10-21.
+The application source license is separate and unchanged.
+
+No external runtime artifacts were resolved. Android platform APIs are provided by the operating system. JUnit is host-test-only and is not bundled.
+

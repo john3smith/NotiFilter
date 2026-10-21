@@ -30,6 +30,11 @@ public final class HistoryActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(20), dp(16), dp(12));
+        root.setOnApplyWindowInsetsListener((view, insets) -> {
+            view.setPadding(dp(16), dp(20) + insets.getSystemWindowInsetTop(),
+                    dp(16), dp(12) + insets.getSystemWindowInsetBottom());
+            return insets;
+        });
         root.setBackgroundColor(Color.rgb(247, 249, 252));
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -40,6 +45,23 @@ public final class HistoryActivity extends Activity {
         refresh.setOnClickListener(v -> refresh());
         status = label("불러오는 중…", 13, false); root.addView(status);
         root.addView(label("삭제 확인 시간 · 최근 1,000개 · 기기 내부에만 저장", 12, false));
+        Button clear = new Button(this); clear.setText("저장된 이력 모두 삭제");
+        root.addView(clear);
+        clear.setOnClickListener(v -> new android.app.AlertDialog.Builder(this)
+                .setTitle("저장된 알림 이력을 삭제할까요?")
+                .setMessage("기기 내부에 보관된 알림 내용과 아이콘을 삭제합니다. 필터 규칙은 유지되며 새로 제거되는 알림은 다시 기록될 수 있습니다.")
+                .setNegativeButton("취소", null)
+                .setPositiveButton("삭제", (dialog, which) -> {
+                    clear.setEnabled(false);
+                    requestId++;
+                    HistoryStore.get(this).clear(() -> {
+                        if (isFinishing() || isDestroyed()) return;
+                        clear.setEnabled(true); refresh();
+                    }, () -> {
+                        if (isFinishing() || isDestroyed()) return;
+                        clear.setEnabled(true); status.setText("이력을 삭제하지 못했습니다. 다시 시도해 주세요.");
+                    });
+                }).show());
         ListView list = new ListView(this);
         list.setAdapter(adapter);
         root.addView(list, new LinearLayout.LayoutParams(-1, 0, 1));
