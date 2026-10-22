@@ -1,0 +1,8 @@
+{
+  "format": 1,
+  "rotation_min_sdk": 33,
+  "legacy_certificate_sha256": "97a629dccea6d8cc04480c762dd88b8d31c9eba5fc06ba9e95df130fbab01765",
+  "release_certificate_sha256": "e68be4c7318bed9807f9a186d8329512c29c955f2fd639c4c7cf9d7f8af6a51c",
+  "package": "com.local.noti_filter",
+  "version_introduced": "1.0.9"
+}
