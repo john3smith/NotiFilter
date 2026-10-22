@@ -14,9 +14,8 @@ android {
     buildTypes {
         release {
             debuggable false
-            // Preserve the certificate used by existing installed APKs.
-            // This is a compatibility release, not a new production key identity.
-            signingConfig signingConfigs.debug
+            // Signed separately; never distribute the Android development identity.
+            signingConfig null
         }
     }
 }
@@ -24,3 +23,5 @@ android {
 dependencies { testImplementation 'junit:junit:4.13.2' }
 
 apply from: rootProject.file("gradle/store-release.gradle")
+
+apply from: rootProject.file("gradle/release-safety.gradle")
