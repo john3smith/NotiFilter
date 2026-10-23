@@ -182,7 +182,31 @@ public final class MainActivity extends Activity {
         root.addView(ruleHeader);
         add.setOnClickListener(v -> showAddDialog());
 
-        List<Rule> rules = store.load();
+        LinearLayout sortRow=new LinearLayout(this);
+        RuleOrder.Mode selectedOrder=store.sortOrder();
+        int[] sortIds={R.id.sort_newest,R.id.sort_oldest,R.id.sort_name};
+        for (RuleOrder.Mode mode : RuleOrder.Mode.values()) {
+            Button choice=button(mode.label, mode==selectedOrder);
+            choice.setId(sortIds[mode.ordinal()]);
+            choice.setSelected(mode==selectedOrder);
+            choice.setContentDescription(mode.label + (mode==selectedOrder ? " 선택됨" : " 정렬"));
+            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,dp(48),1);
+            if (mode.ordinal()>0) cp.leftMargin=dp(6);
+            sortRow.addView(choice,cp);
+            choice.setOnClickListener(v -> {
+                if (store.sortOrder()==mode) return;
+                int position=scroll.getScrollY();
+                store.setSortOrder(mode);
+                render();
+                ScrollView next=(ScrollView)root.getParent();
+                next.post(() -> next.scrollTo(0,position));
+            });
+        }
+        LinearLayout.LayoutParams sortParams=new LinearLayout.LayoutParams(-1,-2);
+        sortParams.topMargin=dp(10);sortParams.bottomMargin=dp(12);
+        root.addView(sortRow,sortParams);
+
+        List<Rule> rules = RuleOrder.sorted(store.load(),selectedOrder);
         if (rules.isEmpty()) {
             LinearLayout empty = card();
             empty.addView(text("아직 규칙이 없습니다", 17, INK, true));
@@ -213,6 +237,7 @@ public final class MainActivity extends Activity {
 
     private void addRuleCard(Rule rule) {
         LinearLayout box = card();
+        box.setTag(R.id.rule_card_id,rule.id);
         box.setOnClickListener(v -> {
             // A switch may have changed since this card was rendered.
             for (Rule current : store.load()) {

@@ -3,4 +3,8 @@
     <item name="rule_phrase" type="id" />
     <item name="app_search" type="id" />
     <item name="app_load_status" type="id" />
+    <item name="sort_newest" type="id" />
+    <item name="sort_oldest" type="id" />
+    <item name="sort_name" type="id" />
+    <item name="rule_card_id" type="id" />
 </resources>

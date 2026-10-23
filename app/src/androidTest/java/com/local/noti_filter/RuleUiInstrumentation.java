@@ -14,7 +14,8 @@ import java.util.concurrent.TimeUnit;
 
 public final class RuleUiInstrumentation extends Instrumentation {
     private boolean catalogChecks;
-    @Override public void onCreate(Bundle args) { catalogChecks=args!=null && "true".equals(args.getString("catalogChecks"));super.onCreate(args);start(); }
+    private boolean sortChecks;
+    @Override public void onCreate(Bundle args) { catalogChecks=args!=null && "true".equals(args.getString("catalogChecks"));sortChecks=args!=null && "true".equals(args.getString("sortChecks"));super.onCreate(args);start(); }
     static Object field(Object owner,String name) throws Exception {
         Field f=owner.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(owner);
     }
@@ -28,6 +29,7 @@ public final class RuleUiInstrumentation extends Instrumentation {
             if(!getTargetContext().getPackageName().equals("com.local.noti_filter.uitest"))throw new IllegalStateException("Isolated clone only");
             screen=(MainActivity)startActivitySync(new Intent(getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             MainActivity activity=screen;waitForIdleSync();ArrayList<Long> times=new ArrayList<>();
+            if(sortChecks){RuleSortChecks.run(this,activity);result.putString("stream","PASS 8 sorting UI checks; clone rules and sort preference restored\n");finish(android.app.Activity.RESULT_OK,result);return;}
             if(catalogChecks){CatalogDialogChecks.run(this,activity);result.putString("stream","PASS async dialog/cache/edit/picker checks; clone rules restored\n");finish(android.app.Activity.RESULT_OK,result);return;}
             for(int i=0;i<4;i++) {
                 CountDownLatch drawn=new CountDownLatch(1);long[] started={0},elapsed={0};

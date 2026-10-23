@@ -12,6 +12,7 @@ public final class RuleStore {
     private static final String PREFS = "filter_rules";
     private static final String KEY_RULES = "rules";
     private static final String KEY_PAUSED = "paused";
+    private static final String KEY_SORT = "sort_order";
     private final SharedPreferences prefs;
     private String cachedJson;
     private List<Rule> cachedRules;
@@ -22,6 +23,8 @@ public final class RuleStore {
 
     public boolean isPaused() { return prefs.getBoolean(KEY_PAUSED, false); }
     public void setPaused(boolean value) { prefs.edit().putBoolean(KEY_PAUSED, value).apply(); }
+    public RuleOrder.Mode sortOrder() { return RuleOrder.Mode.fromKey(prefs.getString(KEY_SORT, "newest")); }
+    public void setSortOrder(RuleOrder.Mode mode) { prefs.edit().putString(KEY_SORT, mode.key).apply(); }
 
     public synchronized List<Rule> load() {
         String encoded = prefs.getString(KEY_RULES, "[]");
