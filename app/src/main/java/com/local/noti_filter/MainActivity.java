@@ -24,6 +24,7 @@ import android.widget.Button;
 import android.widget.BaseAdapter;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.ScrollView;
@@ -120,40 +121,40 @@ public final class MainActivity extends Activity {
         scroll.addView(root);
         setContentView(scroll);
 
+        LinearLayout heading = new LinearLayout(this);
+        heading.setGravity(Gravity.TOP);
+        LinearLayout titles = new LinearLayout(this);
+        titles.setOrientation(LinearLayout.VERTICAL);
         TextView eyebrow = text("알림을 더 조용하게", 13, BLUE, true);
-        root.addView(eyebrow);
+        titles.addView(eyebrow);
         TextView title = text("문구 알림 필터", 29, INK, true);
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(-1, -2);
         tp.topMargin = dp(5);
-        root.addView(title, tp);
-        StoreInfo.addButton(this, root);
+        titles.addView(title, tp);
+        heading.addView(titles, new LinearLayout.LayoutParams(0, -2, 1));
+        ImageButton settings = new ImageButton(this);
+        settings.setId(R.id.main_settings);
+        settings.setImageResource(R.drawable.ic_settings);
+        settings.setContentDescription("설정");
+        settings.setPadding(dp(12), dp(12), dp(12), dp(12));
+        settings.setBackground(new RippleDrawable(ColorStateList.valueOf(0x222563EB),
+                shape(Color.rgb(234, 241, 255), 12), null));
+        LinearLayout.LayoutParams settingsParams = new LinearLayout.LayoutParams(dp(48), dp(48));
+        settingsParams.leftMargin = dp(12);
+        heading.addView(settings, settingsParams);
+        settings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
+        root.addView(heading);
         TextView subtitle = text("원하는 앱과 문구를 선택하면 일치하는 알림을 자동으로 지웁니다.", 14, MUTED, false);
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, -2);
-        sp.topMargin = dp(8); sp.bottomMargin = dp(22);
+        sp.topMargin = dp(8); sp.bottomMargin = dp(12);
         root.addView(subtitle, sp);
 
-        LinearLayout access = card();
         boolean granted = hasAccess();
-        access.addView(text(granted ? "●  알림 접근 허용됨" : "●  알림 접근 권한 필요", 17, granted ? Color.rgb(24, 137, 84) : Color.rgb(196, 107, 15), true));
-        TextView accessInfo = text("알림 내용을 읽어야 문구를 검사할 수 있습니다. 데이터는 기기 밖으로 전송하지 않습니다.", 13, MUTED, false);
-        LinearLayout.LayoutParams aip = new LinearLayout.LayoutParams(-1, -2);
-        aip.topMargin = dp(8);
-        access.addView(accessInfo, aip);
-        Button settings = button("알림 접근 설정 열기", false);
-        LinearLayout.LayoutParams sbp = new LinearLayout.LayoutParams(-1, -2);
-        sbp.topMargin = dp(14);
-        access.addView(settings, sbp);
-        settings.setOnClickListener(v -> new AlertDialog.Builder(this)
-                .setTitle("알림 접근 권한 사용 안내")
-                .setMessage("규칙 검사를 위해 알림의 앱·제목·본문을 읽고, 일치하는 알림을 제거합니다. 삭제한 알림 내용은 기기 내부 이력에 최대 1,000개 저장하며 이력 화면에서 지울 수 있습니다. 개발자 서버로 전송하지 않습니다. 권한을 거부하면 자동 필터만 사용할 수 없으며 Android 설정에서 언제든 해제할 수 있습니다.")
-                .setNegativeButton("취소", null)
-                .setNeutralButton("개인정보 안내", (dialog, which) -> StoreInfo.show(this))
-                .setPositiveButton("동의하고 설정 열기", (dialog, which) -> {
-                    try { startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)); }
-                    catch (android.content.ActivityNotFoundException unavailable) {
-                        Toast.makeText(this, "이 기기에서 알림 접근 설정을 열 수 없습니다.", Toast.LENGTH_SHORT).show();
-                    }
-                }).show());
+        TextView accessStatus = text(granted ? "●  알림 접근 허용됨" : "●  알림 접근 권한 필요 · 설정에서 확인", 13,
+                granted ? Color.rgb(24, 137, 84) : Color.rgb(196, 107, 15), true);
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(-1, -2);
+        statusParams.bottomMargin = dp(18);
+        root.addView(accessStatus, statusParams);
 
         LinearLayout control = card();
         LinearLayout controlRow = new LinearLayout(this);

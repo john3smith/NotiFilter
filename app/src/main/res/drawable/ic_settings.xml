@@ -1,0 +1,7 @@
+<!-- Project-authored eight-tooth gear, constructed from radial points. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#2563EB" android:fillType="evenOdd"
+        android:pathData="M19.727,9.929 L21.877,10.436 L21.877,13.564 L19.727,14.071 L18.928,16.000 L20.090,17.878 L17.878,20.090 L16.000,18.928 L14.071,19.727 L13.564,21.877 L10.436,21.877 L9.929,19.727 L8.000,18.928 L6.122,20.090 L3.910,17.878 L5.072,16.000 L4.273,14.071 L2.123,13.564 L2.123,10.436 L4.273,9.929 L5.072,8.000 L3.910,6.122 L6.122,3.910 L8.000,5.072 L9.929,4.273 L10.436,2.123 L13.564,2.123 L14.071,4.273 L16.000,5.072 L17.878,3.910 L20.090,6.122 L18.928,8.000 Z M12,8 A4,4 0,1 0,12,16 A4,4 0,1 0,12,8 Z" />
+</vector>

@@ -1,4 +1,8 @@
 <resources>
+    <item name="main_settings" type="id" />
+    <item name="settings_notification_access" type="id" />
+    <item name="settings_privacy" type="id" />
+    <item name="settings_back" type="id" />
     <item name="rule_choose_app" type="id" />
     <item name="rule_phrase" type="id" />
     <item name="app_search" type="id" />
