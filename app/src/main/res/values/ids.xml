@@ -1,0 +1,6 @@
+<resources>
+    <item name="rule_choose_app" type="id" />
+    <item name="rule_phrase" type="id" />
+    <item name="app_search" type="id" />
+    <item name="app_load_status" type="id" />
+</resources>

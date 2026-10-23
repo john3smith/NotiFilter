@@ -4,11 +4,12 @@ android {
     namespace 'com.local.noti_filter'
     compileSdk 36
     defaultConfig {
-        applicationId 'com.local.noti_filter'
+        applicationId project.hasProperty('uiTest') ? 'com.local.noti_filter.uitest' : 'com.local.noti_filter'
+        testInstrumentationRunner 'com.local.noti_filter.RuleUiInstrumentation'
         minSdk 26
         targetSdk 35
-        versionCode 10
-        versionName '1.0.9'
+        versionCode 11
+        versionName '1.0.10'
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     buildTypes {
