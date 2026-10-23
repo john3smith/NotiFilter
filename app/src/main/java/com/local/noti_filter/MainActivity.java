@@ -6,10 +6,13 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.text.Editable;
@@ -108,9 +111,10 @@ public final class MainActivity extends Activity {
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(20), dp(28), dp(20), dp(28));
-        root.setOnApplyWindowInsetsListener((view, insets) -> {
-            view.setPadding(dp(20), dp(28) + insets.getSystemWindowInsetTop(),
-                    dp(20), dp(28) + insets.getSystemWindowInsetBottom());
+        scroll.setClipToPadding(true);
+        scroll.setOnApplyWindowInsetsListener((view, insets) -> {
+            view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
+                    insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
             return insets;
         });
         scroll.addView(root);
@@ -136,7 +140,7 @@ public final class MainActivity extends Activity {
         aip.topMargin = dp(8);
         access.addView(accessInfo, aip);
         Button settings = button("알림 접근 설정 열기", false);
-        LinearLayout.LayoutParams sbp = new LinearLayout.LayoutParams(-1, dp(48));
+        LinearLayout.LayoutParams sbp = new LinearLayout.LayoutParams(-1, -2);
         sbp.topMargin = dp(14);
         access.addView(settings, sbp);
         settings.setOnClickListener(v -> new AlertDialog.Builder(this)
@@ -166,23 +170,23 @@ public final class MainActivity extends Activity {
             if (!checked) showScanResult(FilterService.clearExistingForEnabledRules());
         });
         Button history = button("삭제한 알림 이력", false);
-        LinearLayout.LayoutParams historyParams = new LinearLayout.LayoutParams(-1, dp(48));
+        LinearLayout.LayoutParams historyParams = new LinearLayout.LayoutParams(-1, -2);
         historyParams.topMargin = dp(12);
         control.addView(history, historyParams);
         history.setOnClickListener(v -> startActivity(new Intent(this, HistoryActivity.class)));
 
-        LinearLayout ruleHeader = new LinearLayout(this);
+        LinearLayout ruleHeader = new AdaptiveRow(this, false);
         ruleHeader.setGravity(Gravity.CENTER_VERTICAL);
         TextView header = text("차단 규칙", 20, INK, true);
         ruleHeader.addView(header, new LinearLayout.LayoutParams(0, -2, 1));
         Button add = button("+ 규칙 추가", true);
         addRuleButton = add;
         add.setEnabled(addRuleDialog == null);
-        ruleHeader.addView(add, new LinearLayout.LayoutParams(-2, dp(44)));
+        ruleHeader.addView(add, new LinearLayout.LayoutParams(-2, -2));
         root.addView(ruleHeader);
         add.setOnClickListener(v -> showAddDialog());
 
-        LinearLayout sortRow=new LinearLayout(this);
+        LinearLayout sortRow=new AdaptiveRow(this, true);
         RuleOrder.Mode selectedOrder=store.sortOrder();
         int[] sortIds={R.id.sort_newest,R.id.sort_oldest,R.id.sort_name};
         for (RuleOrder.Mode mode : RuleOrder.Mode.values()) {
@@ -190,8 +194,7 @@ public final class MainActivity extends Activity {
             choice.setId(sortIds[mode.ordinal()]);
             choice.setSelected(mode==selectedOrder);
             choice.setContentDescription(mode.label + (mode==selectedOrder ? " 선택됨" : " 정렬"));
-            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,dp(48),1);
-            if (mode.ordinal()>0) cp.leftMargin=dp(6);
+            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,-2,1);
             sortRow.addView(choice,cp);
             choice.setOnClickListener(v -> {
                 if (store.sortOrder()==mode) return;
@@ -229,9 +232,22 @@ public final class MainActivity extends Activity {
         b.setAllCaps(false);
         b.setText(label);
         b.setTextSize(14);
+        b.setSingleLine(false);
+        b.setMaxLines(Integer.MAX_VALUE);
+        b.setGravity(Gravity.CENTER);
+        b.setMinWidth(0);
+        b.setMinimumWidth(0);
+        b.setMinHeight(dp(48));
+        b.setMinimumHeight(dp(48));
+        b.setPadding(dp(16), dp(12), dp(16), dp(12));
         b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         b.setTextColor(primary ? Color.WHITE : BLUE);
-        b.setBackground(shape(primary ? BLUE : Color.rgb(234, 241, 255), 12));
+        b.setBackground(new RippleDrawable(ColorStateList.valueOf(primary ? 0x33FFFFFF : 0x222563EB),
+                shape(primary ? BLUE : Color.rgb(234, 241, 255), 12), null));
+        // The platform Button's default raised shadow is clipped by tight action rows.
+        b.setStateListAnimator(null);
+        b.setElevation(0);
+        b.setTranslationZ(0);
         return b;
     }
 
@@ -307,10 +323,10 @@ public final class MainActivity extends Activity {
         }
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(22), dp(12), dp(22), 0);
+        content.setPadding(dp(22), dp(12), dp(22), dp(12));
         Button choose = button("대상 앱: " + selected[0].label + "  ▾", false);
         choose.setId(R.id.rule_choose_app);
-        content.addView(choose, new LinearLayout.LayoutParams(-1, dp(48)));
+        content.addView(choose, new LinearLayout.LayoutParams(-1, -2));
         TextView loading=text("앱 목록 확인 중…",12,MUTED,false);
         content.addView(loading);
         choose.setOnClickListener(v -> showAppPicker(apps, option -> {
@@ -323,10 +339,12 @@ public final class MainActivity extends Activity {
                 new LinearLayout.LayoutParams(0, -2, 1));
         TextView help = text("?", 19, MUTED, true);
         help.setGravity(Gravity.CENTER);
+        help.setMinHeight(dp(44));
+        help.setPadding(0, dp(8), 0, dp(8));
         help.setBackground(shape(Color.rgb(235, 239, 245), 22));
         help.setContentDescription("문구 조건과 AND OR 우선순위 도움말");
         help.setOnClickListener(v -> showRuleHelp());
-        phraseHeader.addView(help, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        phraseHeader.addView(help, new LinearLayout.LayoutParams(dp(44), -2));
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1, -2);
         hp.topMargin = dp(12);
         content.addView(phraseHeader, hp);
@@ -339,11 +357,14 @@ public final class MainActivity extends Activity {
             phrase.setText(original.phrase);
             phrase.setSelection(phrase.length());
         }
-        LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(-1, dp(58));
+        phrase.setMinHeight(dp(58));
+        LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(-1, -2);
         ep.topMargin = dp(12);
         content.addView(phrase, ep);
+        ScrollView formScroll = new ScrollView(this);
+        formScroll.addView(content);
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle(editing ? "차단 규칙 수정" : "차단 규칙 추가")
-                .setView(content).setNegativeButton("취소", null)
+                .setView(formScroll).setNegativeButton("취소", null)
                 .setPositiveButton(editing ? "저장" : "추가", null).create();
         addRuleDialog = dialog;
         AppCatalog.Listener listener=(available,busy,failed)->{
@@ -466,7 +487,8 @@ public final class MainActivity extends Activity {
         search.setSingleLine(true);
         search.setHint("앱 이름 또는 패키지 검색");
         search.setTextSize(16);
-        layout.addView(search, new LinearLayout.LayoutParams(-1, dp(52)));
+        search.setMinHeight(dp(52));
+        layout.addView(search, new LinearLayout.LayoutParams(-1, -2));
         pickerSearch=search;
         pickerStatus=text("",12,MUTED,false);
         pickerStatus.setId(R.id.app_load_status);
@@ -478,7 +500,7 @@ public final class MainActivity extends Activity {
         AppAdapter adapter = new AppAdapter(apps);
         pickerAdapter=adapter;
         list.setAdapter(adapter);
-        LinearLayout.LayoutParams listParams = new LinearLayout.LayoutParams(-1, dp(430));
+        LinearLayout.LayoutParams listParams = new LinearLayout.LayoutParams(-1, 0, 1);
         listParams.topMargin = dp(8);
         layout.addView(list, listParams);
 
@@ -509,6 +531,16 @@ public final class MainActivity extends Activity {
         picker.getWindow().setSoftInputMode(
                 android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
                         | android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        View pickerDecor = picker.getWindow().getDecorView();
+        pickerDecor.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            if (!picker.isShowing()) return;
+            Rect visible = new Rect();
+            pickerDecor.getWindowVisibleDisplayFrame(visible);
+            int height = Math.min(dp(640), Math.round(visible.height() * 0.9f));
+            if (height > 0 && Math.abs(picker.getWindow().getAttributes().height - height) > dp(2)) {
+                picker.getWindow().setLayout(picker.getWindow().getAttributes().width, height);
+            }
+        });
     }
 
     private List<AppOption> installedApps() {

@@ -36,7 +36,7 @@ public final class HistoryActivity extends Activity {
             return insets;
         });
         root.setBackgroundColor(Color.rgb(247, 249, 252));
-        LinearLayout header = new LinearLayout(this);
+        LinearLayout header = new AdaptiveRow(this, false);
         header.setGravity(Gravity.CENTER_VERTICAL);
         TextView title = label("삭제한 알림 이력", 23, true);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
