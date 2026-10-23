@@ -43,15 +43,23 @@ public final class MainActivity extends Activity {
     private AlertDialog addRuleDialog;
     private AlertDialog appPickerDialog;
     private AlertDialog ruleHelpDialog;
+    private AppCatalog catalog;
+    private AppAdapter pickerAdapter;
+    private EditText pickerSearch;
+    private TextView pickerStatus;
+    private boolean appsLoading=true,appsFailed;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        catalog=AppCatalog.get(this);
+        catalog.refresh();
         store = new RuleStore(this);
         render();
     }
 
     @Override protected void onResume() {
         super.onResume();
+        if(catalog!=null)catalog.refresh();
         if (root != null) render();
     }
 
@@ -276,7 +284,10 @@ public final class MainActivity extends Activity {
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(22), dp(12), dp(22), 0);
         Button choose = button("대상 앱: " + selected[0].label + "  ▾", false);
+        choose.setId(R.id.rule_choose_app);
         content.addView(choose, new LinearLayout.LayoutParams(-1, dp(48)));
+        TextView loading=text("앱 목록 확인 중…",12,MUTED,false);
+        content.addView(loading);
         choose.setOnClickListener(v -> showAppPicker(apps, option -> {
             selected[0] = option;
             choose.setText("대상 앱: " + option.label + "  ▾");
@@ -295,6 +306,7 @@ public final class MainActivity extends Activity {
         hp.topMargin = dp(12);
         content.addView(phraseHeader, hp);
         EditText phrase = new EditText(this);
+        phrase.setId(R.id.rule_phrase);
         phrase.setSingleLine(true);
         phrase.setHint("예: 택배,배송;배달,완료");
         phrase.setTextSize(16);
@@ -309,11 +321,24 @@ public final class MainActivity extends Activity {
                 .setView(content).setNegativeButton("취소", null)
                 .setPositiveButton(editing ? "저장" : "추가", null).create();
         addRuleDialog = dialog;
+        AppCatalog.Listener listener=(available,busy,failed)->{
+            if(addRuleDialog!=dialog || !dialog.isShowing() || isDestroyed())return;
+            apps.clear();apps.add(new AppOption("","모든 앱",getDrawable(R.drawable.app_icon)));
+            for(AppCatalog.App app:available)apps.add(new AppOption(app.packageName,app.label,null));
+            for(AppOption app:apps)if(app.packageName.equals(selected[0].packageName)){selected[0]=app;break;}
+            choose.setText("대상 앱: "+selected[0].label+"  ▾");
+            appsLoading=busy;appsFailed=failed;
+            loading.setText(busy?"앱 목록 확인 중…":failed?"목록을 새로 읽지 못했습니다. 대상 앱 선택에서 다시 시도하세요.":"");
+            loading.setVisibility(busy||failed?View.VISIBLE:View.GONE);
+            if(pickerAdapter!=null)pickerAdapter.filter(pickerSearch.getText().toString());
+            updatePickerStatus();
+        };
         if (addRuleButton != null) addRuleButton.setEnabled(false);
         // Rapid taps at the original Add location must not cancel/reopen it.
         // Explicit Cancel and the Android Back button still close the dialog.
         dialog.setCanceledOnTouchOutside(false);
         dialog.setOnDismissListener(ignored -> {
+            catalog.unsubscribe(listener);
             if (addRuleDialog == dialog) {
                 if (appPickerDialog != null) appPickerDialog.dismiss();
                 if (ruleHelpDialog != null) ruleHelpDialog.dismiss();
@@ -365,6 +390,8 @@ public final class MainActivity extends Activity {
             render();
         }));
         dialog.show();
+        // Show the form before querying packages or reading the on-disk label cache.
+        catalog.subscribe(listener);
     }
 
     private void showRuleHelp() {
@@ -410,13 +437,21 @@ public final class MainActivity extends Activity {
         layout.setPadding(dp(12), dp(4), dp(12), 0);
 
         EditText search = new EditText(this);
+        search.setId(R.id.app_search);
         search.setSingleLine(true);
         search.setHint("앱 이름 또는 패키지 검색");
         search.setTextSize(16);
         layout.addView(search, new LinearLayout.LayoutParams(-1, dp(52)));
+        pickerSearch=search;
+        pickerStatus=text("",12,MUTED,false);
+        pickerStatus.setId(R.id.app_load_status);
+        pickerStatus.setPadding(dp(8),dp(8),dp(8),dp(8));
+        pickerStatus.setOnClickListener(v->catalog.refresh());
+        layout.addView(pickerStatus);updatePickerStatus();
 
         ListView list = new ListView(this);
         AppAdapter adapter = new AppAdapter(apps);
+        pickerAdapter=adapter;
         list.setAdapter(adapter);
         LinearLayout.LayoutParams listParams = new LinearLayout.LayoutParams(-1, dp(430));
         listParams.topMargin = dp(8);
@@ -430,7 +465,7 @@ public final class MainActivity extends Activity {
         appPickerDialog = picker;
         picker.setCanceledOnTouchOutside(false);
         picker.setOnDismissListener(ignored -> {
-            if (appPickerDialog == picker) appPickerDialog = null;
+            if (appPickerDialog == picker) {appPickerDialog = null;pickerAdapter=null;pickerSearch=null;pickerStatus=null;}
         });
         list.setOnItemClickListener((parent, view, position, id) -> {
             if (appPickerDialog != picker || !picker.isShowing()) return;
@@ -445,6 +480,7 @@ public final class MainActivity extends Activity {
             @Override public void afterTextChanged(Editable s) {}
         });
         picker.show();
+        catalog.refresh();
         picker.getWindow().setSoftInputMode(
                 android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
                         | android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
@@ -453,18 +489,13 @@ public final class MainActivity extends Activity {
     private List<AppOption> installedApps() {
         List<AppOption> result = new ArrayList<>();
         result.add(new AppOption("", "모든 앱", getDrawable(R.drawable.app_icon)));
-        PackageManager pm = getPackageManager();
-        Intent launcher = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
-        List<ResolveInfo> activities = pm.queryIntentActivities(launcher, 0);
-        for (ResolveInfo info : activities) {
-            String pkg = info.activityInfo.packageName;
-            if (pkg.equals(getPackageName())) continue;
-            boolean already = false;
-            for (AppOption existing : result) if (existing.packageName.equals(pkg)) { already = true; break; }
-            if (!already) result.add(new AppOption(pkg, info.loadLabel(pm).toString(), info.loadIcon(pm)));
-        }
-        result.subList(1, result.size()).sort(Comparator.comparing(o -> o.label));
+        for(AppCatalog.App app:catalog.snapshot())result.add(new AppOption(app.packageName,app.label,null));
         return result;
+    }
+
+    private void updatePickerStatus(){
+        if(pickerStatus==null)return;
+        pickerStatus.setText(appsLoading?"앱 목록 불러오는 중…":appsFailed?"앱 목록 새로고침 실패 · 눌러서 다시 시도":"앱 목록 새로고침");
     }
 
     private boolean hasAccess() {
@@ -511,7 +542,12 @@ public final class MainActivity extends Activity {
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(12), dp(9), dp(12), dp(9));
             ImageView image = new ImageView(MainActivity.this);
-            image.setImageDrawable(item.icon);
+            Drawable cached=item.packageName.isEmpty()?null:catalog.cachedIcon(item.packageName);
+            image.setImageDrawable(item.icon!=null?item.icon:cached!=null?cached:getDrawable(R.drawable.app_icon));
+            image.setTag(item.packageName);
+            if(!item.packageName.isEmpty() && cached==null)catalog.icon(item.packageName,icon->{
+                if(item.packageName.equals(image.getTag()) && image.isAttachedToWindow())image.setImageDrawable(icon);
+            });
             image.setContentDescription(item.label + " 아이콘");
             row.addView(image, new LinearLayout.LayoutParams(dp(40), dp(40)));
             LinearLayout labels = new LinearLayout(MainActivity.this);
