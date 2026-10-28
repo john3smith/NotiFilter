@@ -6,6 +6,8 @@ public final class Rule {
     public final String appName;
     public final String phrase;
     public final boolean enabled;
+    // Bound to this immutable rule's lifetime, independent of shared-cache eviction.
+    private volatile RuleExpression compiledExpression;
 
     public Rule(long id, String packageName, String appName, String phrase, boolean enabled) {
         this.id = id;
@@ -17,5 +19,14 @@ public final class Rule {
 
     public Rule withEnabled(boolean value) {
         return new Rule(id, packageName, appName, phrase, value);
+    }
+
+    boolean matchesNormalized(String text) {
+        RuleExpression expression = compiledExpression;
+        if (expression == null) {
+            expression = RuleExpression.compile(phrase);
+            compiledExpression = expression;
+        }
+        return expression.matchesNormalized(text);
     }
 }
