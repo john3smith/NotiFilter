@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
+import java.util.function.BooleanSupplier;
 
 /** Private, bounded history. All database and icon decoding work is off the UI thread. */
 public final class HistoryStore extends SQLiteOpenHelper {
@@ -99,11 +100,14 @@ public final class HistoryStore extends SQLiteOpenHelper {
         });
     }
 
-    public void load(Consumer<List<Entry>> success, Runnable failure) {
+    public void load(BooleanSupplier current, Consumer<List<Entry>> success, Runnable failure) {
         IO.execute(() -> {
+            // Superseded requests must not delay history writes with obsolete reads.
+            if (!current.getAsBoolean()) return;
             List<Entry> entries = new ArrayList<>();
             try (Cursor cursor = getReadableDatabase().query("history", null, null, null, null, null, "id DESC", "1000")) {
                 while (cursor.moveToNext()) {
+                    if (!current.getAsBoolean()) return;
                     byte[] icon = cursor.getBlob(cursor.getColumnIndexOrThrow("icon"));
                     entries.add(new Entry(cursor.getLong(cursor.getColumnIndexOrThrow("removed_at")),
                             cursor.getString(cursor.getColumnIndexOrThrow("package_name")),
@@ -111,10 +115,10 @@ public final class HistoryStore extends SQLiteOpenHelper {
                             HistoryCipher.decrypt(cursor.getString(cursor.getColumnIndexOrThrow("content"))),
                             icon == null ? null : BitmapFactory.decodeByteArray(icon, 0, icon.length)));
                 }
-                MAIN.post(() -> success.accept(entries));
+                MAIN.post(() -> { if (current.getAsBoolean()) success.accept(entries); });
             } catch (RuntimeException error) {
                 Log.w("NotiFilter", "History load failed: " + error.getClass().getSimpleName());
-                MAIN.post(failure);
+                MAIN.post(() -> { if (current.getAsBoolean()) failure.run(); });
             }
         });
     }
