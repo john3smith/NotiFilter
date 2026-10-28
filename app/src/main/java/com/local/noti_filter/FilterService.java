@@ -7,8 +7,6 @@ import android.service.notification.StatusBarNotification;
 import java.lang.ref.WeakReference;
 import java.util.Collections;
 import java.util.List;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.LinkedHashSet;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
@@ -18,13 +16,13 @@ public final class FilterService extends NotificationListenerService {
     private static WeakReference<FilterService> connected = new WeakReference<>(null);
     private RuleStore rules;
     @Override public void onCreate() { super.onCreate(); rules = new RuleStore(this); }
-    private final Map<String, Pending> pending = new HashMap<>();
+    private final PendingRemovals<Pending> pending = new PendingRemovals<>(1000, 30000, item -> item.requestedAt);
     private static final class Pending {
         final String pkg, text;
         final long requestedAt;
-        Pending(StatusBarNotification sbn) {
+        Pending(StatusBarNotification sbn, long now) {
             pkg = sbn.getPackageName(); text = notificationText(sbn);
-            requestedAt = SystemClock.elapsedRealtime();
+            requestedAt = now;
         }
     }
 
@@ -70,9 +68,8 @@ public final class FilterService extends NotificationListenerService {
     }
 
     private boolean requestRemoval(StatusBarNotification sbn) {
-        pending.entrySet().removeIf(item -> SystemClock.elapsedRealtime() - item.getValue().requestedAt > 30000);
-        if (pending.size() >= 1000 && !pending.containsKey(sbn.getKey())) return false;
-        pending.put(sbn.getKey(), new Pending(sbn));
+        long now = SystemClock.elapsedRealtime();
+        if (!pending.offer(sbn.getKey(), () -> new Pending(sbn, now), now)) return false;
         try { cancelNotification(sbn.getKey()); return true; }
         catch (SecurityException | IllegalStateException unavailable) {
             pending.remove(sbn.getKey()); return false;
