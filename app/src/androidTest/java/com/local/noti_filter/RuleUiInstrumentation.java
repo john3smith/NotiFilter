@@ -16,7 +16,8 @@ public final class RuleUiInstrumentation extends Instrumentation {
     private boolean catalogChecks;
     private boolean sortChecks;
     private boolean historyChecks;
-    @Override public void onCreate(Bundle args) { historyChecks=args!=null && "true".equals(args.getString("historyChecks"));catalogChecks=args!=null && "true".equals(args.getString("catalogChecks"));sortChecks=args!=null && "true".equals(args.getString("sortChecks"));super.onCreate(args);start(); }
+    private boolean historyLoadChecks;
+    @Override public void onCreate(Bundle args) { historyLoadChecks=args!=null && "true".equals(args.getString("historyLoadChecks"));historyChecks=args!=null && "true".equals(args.getString("historyChecks"));catalogChecks=args!=null && "true".equals(args.getString("catalogChecks"));sortChecks=args!=null && "true".equals(args.getString("sortChecks"));super.onCreate(args);start(); }
     static Object field(Object owner,String name) throws Exception {
         Field f=owner.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(owner);
     }
@@ -28,6 +29,7 @@ public final class RuleUiInstrumentation extends Instrumentation {
         Bundle result=new Bundle();MainActivity screen=null;
         try {
             if(!getTargetContext().getPackageName().equals("com.local.noti_filter.uitest"))throw new IllegalStateException("Isolated clone only");
+            if(historyLoadChecks){result.putString("stream",HistoryLoadChecks.run(this));finish(android.app.Activity.RESULT_OK,result);return;}
             if(historyChecks){
                 String report=HistoryRetentionChecks.run(getTargetContext());
                 try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(getTargetContext().getCacheDir(),"retention-result.txt"))) {

@@ -23,7 +23,7 @@ public final class HistoryActivity extends Activity {
     private final List<HistoryStore.Entry> entries = new ArrayList<>();
     private final Adapter adapter = new Adapter();
     private TextView status;
-    private int requestId;
+    private volatile int requestId;
     private int dp(int n) { return Math.round(getResources().getDisplayMetrics().density * n); }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -74,7 +74,7 @@ public final class HistoryActivity extends Activity {
     private void refresh() {
         int current = ++requestId;
         status.setText("불러오는 중…");
-        HistoryStore.get(this).load(result -> {
+        HistoryStore.get(this).load(() -> current == requestId, result -> {
             if (isFinishing() || isDestroyed() || current != requestId) return;
             entries.clear(); entries.addAll(result); adapter.notifyDataSetChanged();
             status.setText(entries.isEmpty() ? "아직 삭제한 알림이 없습니다." : "삭제 이력 " + entries.size() + "개 · 최신순");
