@@ -21,6 +21,10 @@ import java.util.function.Consumer;
 
 /** Private, bounded history. All database and icon decoding work is off the UI thread. */
 public final class HistoryStore extends SQLiteOpenHelper {
+    // Missing boundary (fewer than 1000 rows) is NULL, so no rows are deleted.
+    // The INTEGER PRIMARY KEY permits a range delete below the retained boundary.
+    static final String RETAIN_LATEST_SQL = "DELETE FROM history WHERE id < "
+            + "(SELECT id FROM history ORDER BY id DESC LIMIT 1 OFFSET 999)";
     private static HistoryStore instance;
     private static final ExecutorService IO = Executors.newSingleThreadExecutor();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
@@ -76,7 +80,7 @@ public final class HistoryStore extends SQLiteOpenHelper {
                 db.beginTransaction();
                 try {
                     db.insertOrThrow("history", null, values);
-                    db.execSQL("DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY id DESC LIMIT 1000)");
+                    db.execSQL(RETAIN_LATEST_SQL);
                     db.setTransactionSuccessful();
                 } finally { db.endTransaction(); }
             } catch (Exception error) { Log.w("NotiFilter", "History persistence failed"); }

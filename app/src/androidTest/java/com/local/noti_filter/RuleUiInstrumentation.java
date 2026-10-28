@@ -15,7 +15,8 @@ import java.util.concurrent.TimeUnit;
 public final class RuleUiInstrumentation extends Instrumentation {
     private boolean catalogChecks;
     private boolean sortChecks;
-    @Override public void onCreate(Bundle args) { catalogChecks=args!=null && "true".equals(args.getString("catalogChecks"));sortChecks=args!=null && "true".equals(args.getString("sortChecks"));super.onCreate(args);start(); }
+    private boolean historyChecks;
+    @Override public void onCreate(Bundle args) { historyChecks=args!=null && "true".equals(args.getString("historyChecks"));catalogChecks=args!=null && "true".equals(args.getString("catalogChecks"));sortChecks=args!=null && "true".equals(args.getString("sortChecks"));super.onCreate(args);start(); }
     static Object field(Object owner,String name) throws Exception {
         Field f=owner.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(owner);
     }
@@ -27,6 +28,13 @@ public final class RuleUiInstrumentation extends Instrumentation {
         Bundle result=new Bundle();MainActivity screen=null;
         try {
             if(!getTargetContext().getPackageName().equals("com.local.noti_filter.uitest"))throw new IllegalStateException("Isolated clone only");
+            if(historyChecks){
+                String report=HistoryRetentionChecks.run(getTargetContext());
+                try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(getTargetContext().getCacheDir(),"retention-result.txt"))) {
+                    out.write(report.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                }
+                result.putString("stream",report);finish(android.app.Activity.RESULT_OK,result);return;
+            }
             screen=(MainActivity)startActivitySync(new Intent(getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             MainActivity activity=screen;waitForIdleSync();ArrayList<Long> times=new ArrayList<>();
             if(sortChecks){RuleSortChecks.run(this,activity);result.putString("stream","PASS 8 sorting UI checks; clone rules and sort preference restored\n");finish(android.app.Activity.RESULT_OK,result);return;}
