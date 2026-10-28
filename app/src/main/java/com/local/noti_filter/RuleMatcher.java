@@ -12,7 +12,7 @@ public final class RuleMatcher {
         for (Rule rule : rules) {
             if (!rule.enabled || rule.phrase.isEmpty()) continue;
             if (!rule.packageName.isEmpty() && !rule.packageName.equals(sourcePackage)) continue;
-            if (RuleExpression.compile(rule.phrase).matchesNormalized(haystack)) return true;
+            if (rule.matchesNormalized(haystack)) return true;
         }
         return false;
     }

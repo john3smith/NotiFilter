@@ -7,6 +7,40 @@ import java.util.List;
 import static org.junit.Assert.*;
 
 public class RuleMatcherTest {
+    @Test public void largeRuleSetRemainsCorrectAcrossSharedCacheEvictionAndEdits() {
+        List<Rule> rules = new java.util.ArrayList<>();
+        for (int i=0;i<512;i++) rules.add(new Rule(i,"app","App","missing"+i+",today;other"+i,true));
+        rules.add(new Rule(600,"app","App","배송,완료;sale,approved",true));
+        rules.add(new Rule(601,"app","App","ordinary;",true));
+        for (int repeat=0;repeat<3;repeat++) {
+            assertFalse(RuleMatcher.matches(rules,"app","ordinary notification"));
+            assertTrue(RuleMatcher.matches(rules,"app","완료된 배송"));
+            assertTrue(RuleMatcher.matches(rules,"app","APPROVED SALE"));
+            assertFalse(RuleMatcher.matches(rules,"other","APPROVED SALE"));
+            for (int i=0;i<256;i++) RuleMatcher.isValidExpression("eviction"+i);
+        }
+        rules.set(512, rules.get(512).withEnabled(false));
+        assertFalse(RuleMatcher.matches(rules,"app","배송 완료"));
+        rules.set(512,new Rule(600,"app","App","payment,received",true));
+        assertFalse(RuleMatcher.matches(rules,"app","배송 완료"));
+        assertTrue(RuleMatcher.matches(rules,"app","payment received"));
+    }
+
+    @Test public void concurrentFirstUsePublishesOnlyCompleteExpressions() throws Exception {
+        Rule rule=new Rule(1,"","","sale,approved;배송,완료",true);
+        java.util.concurrent.ExecutorService pool=java.util.concurrent.Executors.newFixedThreadPool(4);
+        try {
+            java.util.List<java.util.concurrent.Callable<Boolean>> work=new java.util.ArrayList<>();
+            for(int i=0;i<32;i++) work.add(()-> {
+                for(int j=0;j<100;j++) {
+                    if(!RuleMatcher.matches(Collections.singletonList(rule),"app","APPROVED SALE")) return false;
+                    if(RuleMatcher.matches(Collections.singletonList(rule),"app","sale")) return false;
+                }
+                return true;
+            });
+            for(java.util.concurrent.Future<Boolean> result:pool.invokeAll(work)) assertTrue(result.get());
+        } finally { pool.shutdownNow(); }
+    }
     @Test public void matchesSelectedAppAndPhraseIgnoringCase() {
         Rule rule = new Rule(1, "com.example.chat", "채팅", "광고", true);
         assertTrue(RuleMatcher.matches(Collections.singletonList(rule), "com.example.chat", "오늘의 광고입니다"));
