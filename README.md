@@ -92,3 +92,9 @@ APK: `app/build/outputs/apk/debug/app-debug.apk`
 - The release currently keeps the existing debug signing certificate for data-preserving updates. Non-debuggable does not mean a new production signing identity; a future signing-key migration needs a compatible rotation plan.
 - Migration uses SQLite secure_delete. This does not promise forensic erasure of old OS backups, filesystem snapshots, or externally copied databases.
 - Verified on the regular API 35 emulator: existing 13 histories retained, metadata unchanged, displayed text identical, all old plaintext bodies absent from migrated DB; a newly filtered synthetic notification was also stored as ciphertext.
+
+
+## 1.0.18 · 재귀개선 누적 배포 준비 (2026-10-31)
+
+- 알림 제목·펼친 요약 추출 및 필터·기록 처리 누적 수정. 사용자 직접 배포 요청에 따라 현재 검증된 개선분을 묶습니다.
+- 기존 승인된 서명·권한·개인정보·제3자 고지를 유지합니다. 실물 기기 성공이나 측정하지 않은 속도 향상을 주장하지 않습니다.
