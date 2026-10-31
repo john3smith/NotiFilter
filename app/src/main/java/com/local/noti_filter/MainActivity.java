@@ -47,6 +47,7 @@ public final class MainActivity extends Activity {
     private AlertDialog addRuleDialog;
     private AlertDialog appPickerDialog;
     private AlertDialog ruleHelpDialog;
+    private AlertDialog deleteRuleDialog;
     private AppCatalog catalog;
     private AppAdapter pickerAdapter;
     private EditText pickerSearch;
@@ -68,6 +69,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        if (deleteRuleDialog != null) deleteRuleDialog.dismiss();
         if (ruleHelpDialog != null) ruleHelpDialog.dismiss();
         if (appPickerDialog != null) appPickerDialog.dismiss();
         if (addRuleDialog != null) addRuleDialog.dismiss();
@@ -289,15 +291,26 @@ public final class MainActivity extends Activity {
         delete.setGravity(Gravity.END);
         delete.setPadding(0, dp(12), 0, 0);
         box.addView(delete);
-        delete.setOnClickListener(v -> new AlertDialog.Builder(this)
+        delete.setOnClickListener(v -> showDeleteRuleDialog(rule));
+    }
+
+    private void showDeleteRuleDialog(Rule rule) {
+        if (deleteRuleDialog != null || isFinishing() || isDestroyed()) return;
+        AlertDialog confirmation = new AlertDialog.Builder(this)
                 .setMessage("이 규칙을 삭제하시겠습니까?")
                 .setNegativeButton("취소", null)
                 .setPositiveButton("삭제", (dialog, which) -> {
+                    if (deleteRuleDialog != dialog || isFinishing() || isDestroyed()) return;
                     List<Rule> rules = store.load();
                     rules.removeIf(item -> item.id == rule.id);
                     store.save(rules);
                     render();
-                }).show());
+                }).create();
+        deleteRuleDialog = confirmation;
+        confirmation.setOnDismissListener(dialog -> {
+            if (deleteRuleDialog == confirmation) deleteRuleDialog = null;
+        });
+        confirmation.show();
     }
 
     private void showAddDialog() {
