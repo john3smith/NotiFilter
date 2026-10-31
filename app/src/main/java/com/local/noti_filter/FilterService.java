@@ -117,11 +117,13 @@ public final class FilterService extends NotificationListenerService {
         try {
         StringBuilder text = new StringBuilder();
         append(text, extras.getCharSequence(Notification.EXTRA_TITLE));
+        append(text, extras.getCharSequence(Notification.EXTRA_TITLE_BIG));
         append(text, extras.getCharSequence(Notification.EXTRA_TEXT));
         append(text, extras.getCharSequence(Notification.EXTRA_BIG_TEXT));
         CharSequence[] lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES);
         if (lines != null) for (CharSequence line : lines) append(text, line);
         append(text, extras.getCharSequence(Notification.EXTRA_SUB_TEXT));
+        append(text, extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT));
         // Expanded notifications often repeat the compact body; display it once.
         LinkedHashSet<String> unique = new LinkedHashSet<>();
         for (String part : text.toString().split("\\n")) if (!part.isEmpty()) unique.add(part);

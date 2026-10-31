@@ -14,18 +14,20 @@ import android.view.ViewGroup;
 import java.io.InputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.function.Consumer;
 
 /** Offline privacy and permission disclosure. No remote content or JavaScript. */
 public final class StoreInfo {
     private StoreInfo() { }
-    public static void addButton(Activity activity, ViewGroup parent) {
+    public static void addButton(Activity activity, ViewGroup parent, Consumer<AlertDialog> showDialog) {
         Button button = new Button(activity);
         button.setText("개인정보·권한 안내");
         button.setAllCaps(false);
-        button.setOnClickListener(view -> show(activity));
+        button.setOnClickListener(view -> show(activity, showDialog));
         parent.addView(button, new ViewGroup.LayoutParams(-1, -2));
     }
-    public static void show(Activity activity) {
+    public static void show(Activity activity, Consumer<AlertDialog> showDialog) {
+        if (activity.isFinishing() || activity.isDestroyed()) return;
         String text;
         try (InputStream input = activity.getAssets().open("store-privacy.txt");
              ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
@@ -48,13 +50,18 @@ public final class StoreInfo {
                 .setView(scroll).setPositiveButton("닫기", null);
         String url = activity.getString(R.string.store_privacy_url);
         if (url.startsWith("https://")) dialog.setNeutralButton("웹 방침 보기", (d, which) -> {
+            if (activity.isFinishing() || activity.isDestroyed()) return;
             try { activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
             catch (ActivityNotFoundException ignored) { android.widget.Toast.makeText(activity, "링크를 열 브라우저가 없습니다.", android.widget.Toast.LENGTH_SHORT).show(); }
         });
-        dialog.setNegativeButton("오픈소스 고지", (d, which) -> showNotices(activity));
-        dialog.show();
+        dialog.setNegativeButton("오픈소스 고지", (d, which) -> {
+            d.dismiss();
+            showNotices(activity, showDialog);
+        });
+        showDialog.accept(dialog.create());
     }
-    private static void showNotices(Activity activity) {
+    private static void showNotices(Activity activity, Consumer<AlertDialog> showDialog) {
+        if (activity.isFinishing() || activity.isDestroyed()) return;
         String text;
         try (InputStream input = activity.getAssets().open("store-notices.txt");
              ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
@@ -66,8 +73,8 @@ public final class StoreInfo {
         int pad = Math.round(20 * activity.getResources().getDisplayMetrics().density);
         view.setPadding(pad, pad, pad, pad); view.setTextIsSelectable(true);
         ScrollView scroll = new ScrollView(activity); scroll.addView(view);
-        new AlertDialog.Builder(activity).setTitle("오픈소스 고지").setView(scroll)
-                .setPositiveButton("닫기", null).show();
+        showDialog.accept(new AlertDialog.Builder(activity).setTitle("오픈소스 고지").setView(scroll)
+                .setPositiveButton("닫기", null).create());
     }
 
 }

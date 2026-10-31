@@ -34,8 +34,15 @@ public final class RuleStore {
             JSONArray array = new JSONArray(encoded);
             for (int i = 0; i < array.length(); i++) {
                 JSONObject item = array.getJSONObject(i);
-                result.add(new Rule(item.getLong("id"), item.optString("package"),
-                        item.optString("app"), item.optString("phrase"), item.optBoolean("enabled", true)));
+                // Missing scope becomes "all apps" and a missing toggle becomes enabled
+                // with opt* defaults. Reject malformed values rather than widen a rule.
+                if (!(item.get("package") instanceof String)
+                        || !(item.get("phrase") instanceof String)
+                        || !(item.get("enabled") instanceof Boolean)) {
+                    throw new JSONException("Invalid rule scope, phrase or enabled value");
+                }
+                result.add(new Rule(item.getLong("id"), item.getString("package"),
+                        item.optString("app"), item.getString("phrase"), item.getBoolean("enabled")));
             }
         } catch (JSONException ignored) {
             // An invalid local record must never cause unrelated notifications to be removed.
