@@ -24,9 +24,22 @@ public final class SettingsActivity extends Activity {
     private static final int INK = Color.rgb(28, 39, 58);
     private static final int MUTED = Color.rgb(97, 108, 126);
     private LinearLayout root;
+    private AlertDialog settingsDialog;
 
     @Override public void onCreate(Bundle state) { super.onCreate(state); render(); }
     @Override protected void onResume() { super.onResume(); if (root != null) render(); }
+    @Override protected void onDestroy() {
+        if (settingsDialog != null) settingsDialog.dismiss();
+        super.onDestroy();
+    }
+    private void showSettingsDialog(AlertDialog dialog) {
+        if ((settingsDialog != null && settingsDialog.isShowing()) || isFinishing() || isDestroyed()) return;
+        settingsDialog = dialog;
+        dialog.setOnDismissListener(closed -> {
+            if (settingsDialog == dialog) settingsDialog = null;
+        });
+        dialog.show();
+    }
     private int dp(int value) { return Math.round(getResources().getDisplayMetrics().density * value); }
     private GradientDrawable shape(int color) {
         GradientDrawable background = new GradientDrawable();
@@ -81,7 +94,8 @@ public final class SettingsActivity extends Activity {
         LinearLayout privacy = card(); privacy.addView(text("개인정보와 권한", 17, INK, true));
         Button policy = button("개인정보·권한 안내"); policy.setId(R.id.settings_privacy);
         LinearLayout.LayoutParams policyParams = new LinearLayout.LayoutParams(-1, -2); policyParams.topMargin = dp(12);
-        privacy.addView(policy, policyParams); policy.setOnClickListener(view -> StoreInfo.show(this));
+        privacy.addView(policy, policyParams);
+        policy.setOnClickListener(view -> StoreInfo.show(this, this::showSettingsDialog));
     }
     private boolean hasAccess() {
         String listeners = Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
@@ -91,15 +105,21 @@ public final class SettingsActivity extends Activity {
         return false;
     }
     private void showAccessDisclosure() {
-        new AlertDialog.Builder(this).setTitle("알림 접근 권한 사용 안내")
+        if (settingsDialog != null || isFinishing() || isDestroyed()) return;
+        AlertDialog disclosure = new AlertDialog.Builder(this).setTitle("알림 접근 권한 사용 안내")
                 .setMessage("규칙 검사를 위해 알림의 앱·제목·본문을 읽고, 일치하는 알림을 제거합니다. 삭제한 알림 내용은 기기 내부 이력에 최대 1,000개 저장하며 이력 화면에서 지울 수 있습니다. 개발자 서버로 전송하지 않습니다. 권한을 거부하면 자동 필터만 사용할 수 없으며 Android 설정에서 언제든 해제할 수 있습니다.")
                 .setNegativeButton("취소", null)
-                .setNeutralButton("개인정보 안내", (dialog, which) -> StoreInfo.show(this))
+                .setNeutralButton("개인정보 안내", (dialog, which) -> {
+                    dialog.dismiss();
+                    StoreInfo.show(this, this::showSettingsDialog);
+                })
                 .setPositiveButton("동의하고 설정 열기", (dialog, which) -> {
+                    if (settingsDialog != dialog || isFinishing() || isDestroyed()) return;
                     try { startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)); }
                     catch (android.content.ActivityNotFoundException unavailable) {
                         Toast.makeText(this, "이 기기에서 알림 접근 설정을 열 수 없습니다.", Toast.LENGTH_SHORT).show();
                     }
-                }).show();
+                }).create();
+        showSettingsDialog(disclosure);
     }
 }
