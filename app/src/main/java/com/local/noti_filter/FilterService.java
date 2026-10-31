@@ -117,6 +117,7 @@ public final class FilterService extends NotificationListenerService {
         try {
         StringBuilder text = new StringBuilder();
         append(text, extras.getCharSequence(Notification.EXTRA_TITLE));
+        append(text, extras.getCharSequence(Notification.EXTRA_TITLE_BIG));
         append(text, extras.getCharSequence(Notification.EXTRA_TEXT));
         append(text, extras.getCharSequence(Notification.EXTRA_BIG_TEXT));
         CharSequence[] lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES);
