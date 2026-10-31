@@ -41,7 +41,7 @@ final class AppCatalog {
     private long iconGeneration;
     private final CopyOnWriteArrayList<Listener> listeners=new CopyOnWriteArrayList<>();
     private List<App> apps=Collections.emptyList();
-    private boolean loading,failed,diskRead;
+    private boolean loading,failed,diskRead,refreshPending;
     private String language="";
     private Map<String,App> names=new HashMap<>();
     private AppCatalog(Context c){context=c.getApplicationContext();}
@@ -57,7 +57,7 @@ final class AppCatalog {
     });}
     synchronized List<App> snapshot(){return apps;}
     synchronized void refresh(){
-        if(loading)return;
+        if(loading){refreshPending=true;return;}
         loading=true;failed=false;notifyListeners();worker.execute(this::load);
     }
     private void load(){
@@ -100,15 +100,22 @@ final class AppCatalog {
             names=next;language=locale;
             // A locale change during discovery must not publish mixed-language cached labels.
             if(!locale.equals(context.getResources().getConfiguration().getLocales().toLanguageTags())){
-                synchronized(this){loading=false;}refresh();return;
+                synchronized(this){refreshPending=true;}return;
             }
             JSONArray rows=new JSONArray();
             for(App a:fresh)rows.put(new JSONObject().put("package",a.packageName).put("label",a.label).put("stamp",a.stamp));
             context.getSharedPreferences("app_names_v1",Context.MODE_PRIVATE).edit().putString("catalog",
                 new JSONObject().put("version",1).put("locale",locale).put("apps",rows).toString()).apply();
-            synchronized(this){apps=Collections.unmodifiableList(fresh);loading=false;failed=false;}
-        }catch(Exception unavailable){synchronized(this){loading=false;failed=true;}}
-        notifyListeners();
+            synchronized(this){apps=Collections.unmodifiableList(fresh);failed=false;}
+        }catch(Exception unavailable){synchronized(this){failed=true;}}
+        finally{
+            synchronized(this){
+                // Coalesce requests received during discovery into one follow-up scan.
+                if(refreshPending){refreshPending=false;failed=false;worker.execute(this::load);}
+                else loading=false;
+            }
+            notifyListeners();
+        }
     }
     Drawable cachedIcon(String pkg){return iconCache.get(pkg);}
     private void invalidateIcons(){
