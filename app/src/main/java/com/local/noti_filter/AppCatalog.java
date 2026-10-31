@@ -37,6 +37,8 @@ final class AppCatalog {
     final ExecutorService worker=Executors.newSingleThreadExecutor();
     private final ExecutorService icons=Executors.newSingleThreadExecutor();
     private final LruCache<String,Drawable> iconCache=new LruCache<>(48);
+    // Guard generation, cache publication and callbacks with the cache monitor.
+    private long iconGeneration;
     private final CopyOnWriteArrayList<Listener> listeners=new CopyOnWriteArrayList<>();
     private List<App> apps=Collections.emptyList();
     private boolean loading,failed,diskRead;
@@ -77,7 +79,7 @@ final class AppCatalog {
                     }
                 }catch(Exception ignored){names.clear();}
             }
-            if(!locale.equals(language)){names.clear();iconCache.evictAll();}
+            if(!locale.equals(language)){names.clear();invalidateIcons();}
             PackageManager pm=context.getPackageManager();
             List<ResolveInfo> resolved=pm.queryIntentActivities(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),0);
             List<App> fresh=new ArrayList<>();Map<String,App> next=new HashMap<>();HashSet<String> seen=new HashSet<>();
@@ -94,7 +96,7 @@ final class AppCatalog {
                 }catch(PackageManager.NameNotFoundException removed){/* Package vanished during this scan. */}
             }
             fresh.sort(Comparator.comparing((App a)->a.label).thenComparing(a->a.packageName));
-            if(changed || next.size()!=names.size())iconCache.evictAll();
+            if(changed || next.size()!=names.size())invalidateIcons();
             names=next;language=locale;
             // A locale change during discovery must not publish mixed-language cached labels.
             if(!locale.equals(context.getResources().getConfiguration().getLocales().toLanguageTags())){
@@ -109,13 +111,29 @@ final class AppCatalog {
         notifyListeners();
     }
     Drawable cachedIcon(String pkg){return iconCache.get(pkg);}
+    private void invalidateIcons(){
+        synchronized(iconCache){iconGeneration++;iconCache.evictAll();}
+    }
     void icon(String pkg,Consumer<Drawable> ready){
-        Drawable cached=iconCache.get(pkg);
-        if(cached!=null){ready.accept(cached);return;}
+        final long generation;
+        synchronized(iconCache){
+            Drawable cached=iconCache.get(pkg);
+            if(cached!=null){ready.accept(cached);return;}
+            generation=iconGeneration;
+        }
         icons.execute(()->{
             Drawable value;
             try{value=context.getPackageManager().getApplicationIcon(pkg);}catch(Exception missing){return;}
-            iconCache.put(pkg,value);main.post(()->ready.accept(value));
+            synchronized(iconCache){
+                if(generation!=iconGeneration)return;
+                iconCache.put(pkg,value);
+            }
+            main.post(()->{
+                synchronized(iconCache){
+                    if(generation!=iconGeneration)return;
+                    ready.accept(value);
+                }
+            });
         });
     }
 }
