@@ -32,10 +32,19 @@ final class RuleExpression {
             groups[i] = or[i].split(",", -1);
             for (int j = 0; j < groups[i].length; j++) {
                 groups[i][j] = groups[i][j].trim().toLowerCase(Locale.ROOT);
-                if (groups[i][j].isEmpty()) return null;
+                if (isBlank(groups[i][j])) return null;
             }
         }
         return groups;
+    }
+    private static boolean isBlank(String value) {
+        // Reject empty conditions without trimming more characters from literal terms.
+        for (int i = 0; i < value.length();) {
+            int c = value.codePointAt(i);
+            if (!Character.isWhitespace(c) && !Character.isSpaceChar(c)) return false;
+            i += Character.charCount(c);
+        }
+        return true;
     }
     boolean valid() { return groups != null; }
     boolean matchesNormalized(String text) {
