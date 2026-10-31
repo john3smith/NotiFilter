@@ -106,20 +106,36 @@ public final class SettingsActivity extends Activity {
     }
     private void showAccessDisclosure() {
         if (settingsDialog != null || isFinishing() || isDestroyed()) return;
+        // Keep actions in the same bounded scroll area as the disclosure. The platform
+        // three-button footer can exceed a short window when large text stacks it.
+        LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(24), dp(8), dp(24), dp(16));
+        content.addView(text("규칙 검사를 위해 알림의 앱·제목·본문을 읽고, 일치하는 알림을 제거합니다. 삭제한 알림 내용은 기기 내부 이력에 최대 1,000개 저장하며 이력 화면에서 지울 수 있습니다. 개발자 서버로 전송하지 않습니다. 권한을 거부하면 자동 필터만 사용할 수 없으며 Android 설정에서 언제든 해제할 수 있습니다.", 18, INK, false),
+                new LinearLayout.LayoutParams(-1, -2));
+        ScrollView scroll = new ScrollView(this); scroll.addView(content);
         AlertDialog disclosure = new AlertDialog.Builder(this).setTitle("알림 접근 권한 사용 안내")
-                .setMessage("규칙 검사를 위해 알림의 앱·제목·본문을 읽고, 일치하는 알림을 제거합니다. 삭제한 알림 내용은 기기 내부 이력에 최대 1,000개 저장하며 이력 화면에서 지울 수 있습니다. 개발자 서버로 전송하지 않습니다. 권한을 거부하면 자동 필터만 사용할 수 없으며 Android 설정에서 언제든 해제할 수 있습니다.")
-                .setNegativeButton("취소", null)
-                .setNeutralButton("개인정보 안내", (dialog, which) -> {
-                    dialog.dismiss();
-                    StoreInfo.show(this, this::showSettingsDialog);
-                })
-                .setPositiveButton("동의하고 설정 열기", (dialog, which) -> {
-                    if (settingsDialog != dialog || isFinishing() || isDestroyed()) return;
-                    try { startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)); }
-                    catch (android.content.ActivityNotFoundException unavailable) {
-                        Toast.makeText(this, "이 기기에서 알림 접근 설정을 열 수 없습니다.", Toast.LENGTH_SHORT).show();
-                    }
-                }).create();
+                .setView(scroll).create();
+        Button cancel = button("취소"); cancel.setId(android.R.id.button2);
+        Button privacy = button("개인정보 안내"); privacy.setId(android.R.id.button3);
+        Button consent = button("동의하고 설정 열기"); consent.setId(android.R.id.button1);
+        for (Button action : new Button[] {cancel, privacy, consent}) {
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+            params.topMargin = dp(12); content.addView(action, params);
+        }
+        cancel.setOnClickListener(view -> disclosure.dismiss());
+        privacy.setOnClickListener(view -> {
+            if (settingsDialog != disclosure || isFinishing() || isDestroyed()) return;
+            disclosure.dismiss();
+            StoreInfo.show(this, this::showSettingsDialog);
+        });
+        consent.setOnClickListener(view -> {
+            if (settingsDialog != disclosure || isFinishing() || isDestroyed()) return;
+            disclosure.dismiss();
+            try { startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)); }
+            catch (android.content.ActivityNotFoundException unavailable) {
+                Toast.makeText(this, "이 기기에서 알림 접근 설정을 열 수 없습니다.", Toast.LENGTH_SHORT).show();
+            }
+        });
         showSettingsDialog(disclosure);
     }
 }
