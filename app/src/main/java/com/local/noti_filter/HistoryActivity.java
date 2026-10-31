@@ -1,6 +1,7 @@
 package com.local.noti_filter;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
@@ -23,6 +24,7 @@ public final class HistoryActivity extends Activity {
     private final List<HistoryStore.Entry> entries = new ArrayList<>();
     private final Adapter adapter = new Adapter();
     private TextView status;
+    private AlertDialog clearDialog;
     private volatile int requestId;
     private int dp(int n) { return Math.round(getResources().getDisplayMetrics().density * n); }
     @Override public void onCreate(Bundle state) {
@@ -47,7 +49,9 @@ public final class HistoryActivity extends Activity {
         root.addView(label("삭제 확인 시간 · 최근 1,000개 · 기기 내부에만 저장", 12, false));
         Button clear = new Button(this); clear.setText("저장된 이력 모두 삭제");
         root.addView(clear);
-        clear.setOnClickListener(v -> new android.app.AlertDialog.Builder(this)
+        clear.setOnClickListener(v -> {
+            if (isFinishing() || isDestroyed() || clearDialog != null) return;
+            clearDialog = new AlertDialog.Builder(this)
                 .setTitle("저장된 알림 이력을 삭제할까요?")
                 .setMessage("기기 내부에 보관된 알림 내용과 아이콘을 삭제합니다. 필터 규칙은 유지되며 새로 제거되는 알림은 다시 기록될 수 있습니다.")
                 .setNegativeButton("취소", null)
@@ -61,7 +65,10 @@ public final class HistoryActivity extends Activity {
                         if (isFinishing() || isDestroyed()) return;
                         clear.setEnabled(true); status.setText("이력을 삭제하지 못했습니다. 다시 시도해 주세요.");
                     });
-                }).show());
+                }).create();
+            clearDialog.setOnDismissListener(dialog -> clearDialog = null);
+            clearDialog.show();
+        });
         ListView list = new ListView(this);
         list.setAdapter(adapter);
         root.addView(list, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -70,7 +77,14 @@ public final class HistoryActivity extends Activity {
         setContentView(root);
     }
     @Override public void onResume() { super.onResume(); refresh(); }
-    @Override public void onDestroy() { requestId++; super.onDestroy(); }
+    @Override public void onDestroy() {
+        requestId++;
+        if (clearDialog != null) {
+            clearDialog.dismiss();
+            clearDialog = null;
+        }
+        super.onDestroy();
+    }
     private void refresh() {
         int current = ++requestId;
         status.setText("불러오는 중…");
