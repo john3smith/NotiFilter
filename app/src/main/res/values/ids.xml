@@ -1,4 +1,7 @@
 <resources>
+    <item name="active_notifications" type="id" />
+    <item name="active_notification_list" type="id" />
+    <item name="active_notification_status" type="id" />
     <item name="main_settings" type="id" />
     <item name="settings_notification_access" type="id" />
     <item name="settings_privacy" type="id" />

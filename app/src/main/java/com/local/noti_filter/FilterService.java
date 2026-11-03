@@ -13,7 +13,7 @@ import android.graphics.drawable.Drawable;
 import android.os.SystemClock;
 
 public final class FilterService extends NotificationListenerService {
-    private static WeakReference<FilterService> connected = new WeakReference<>(null);
+    private static volatile WeakReference<FilterService> connected = new WeakReference<>(null);
     private RuleStore rules;
     @Override public void onCreate() { super.onCreate(); rules = new RuleStore(this); }
     private final PendingRemovals<Pending> pending = new PendingRemovals<>(1000, 30000, item -> item.requestedAt);
@@ -84,6 +84,45 @@ public final class FilterService extends NotificationListenerService {
     public static int clearExistingForEnabledRules() {
         FilterService service = connected.get();
         return service == null ? -1 : clearExisting(service.rules.load());
+    }
+
+    /** Transient snapshot; only the selected notification becomes a saved rule. */
+    public static final class ActiveNotification {
+        public final String packageName, appName, text;
+        public final long postedAt;
+        ActiveNotification(String packageName, String appName, String text, long postedAt) {
+            this.packageName = packageName;
+            this.appName = appName;
+            this.text = text;
+            this.postedAt = postedAt;
+        }
+        public boolean canCreateRule() {
+            return text.codePoints().anyMatch(c -> !Character.isWhitespace(c) && !Character.isSpaceChar(c));
+        }
+    }
+
+    // Off the UI thread: listener binder and app labels can be slow.
+    // null means unavailable; empty means a successful empty snapshot.
+    public static List<ActiveNotification> activeNotifications() {
+        FilterService service = connected.get();
+        if (service == null) return null;
+        try {
+            StatusBarNotification[] active = service.getActiveNotifications();
+            if (active == null) return null;
+            List<ActiveNotification> result = new java.util.ArrayList<>();
+            PackageManager pm = service.getPackageManager();
+            for (StatusBarNotification sbn : active) {
+                if (sbn == null || service.getPackageName().equals(sbn.getPackageName())) continue;
+                String pkg = sbn.getPackageName();
+                if (pkg == null || pkg.isEmpty()) continue;
+                String label = pkg;
+                try { label = pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString(); }
+                catch (PackageManager.NameNotFoundException | RuntimeException unavailable) { /* Use package. */ }
+                result.add(new ActiveNotification(pkg, label, notificationText(sbn).trim(), sbn.getPostTime()));
+            }
+            result.sort((a, b) -> Long.compare(b.postedAt, a.postedAt));
+            return result;
+        } catch (SecurityException | IllegalStateException unavailable) { return null; }
     }
 
     private static int clearExisting(List<Rule> rules) {
