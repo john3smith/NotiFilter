@@ -44,6 +44,11 @@ public final class MainActivity extends Activity {
     private RuleStore store;
     private LinearLayout root;
     private Button addRuleButton;
+    private Button activeNotificationsButton;
+    private AlertDialog activeNotificationsDialog;
+    private int activeNotificationsRequest;
+    private final java.util.concurrent.ExecutorService notificationLoader =
+            java.util.concurrent.Executors.newSingleThreadExecutor();
     private AlertDialog addRuleDialog;
     private AlertDialog appPickerDialog;
     private AlertDialog ruleHelpDialog;
@@ -69,6 +74,9 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        activeNotificationsRequest++;
+        if (activeNotificationsDialog != null) activeNotificationsDialog.dismiss();
+        notificationLoader.shutdownNow();
         if (deleteRuleDialog != null) deleteRuleDialog.dismiss();
         if (ruleHelpDialog != null) ruleHelpDialog.dismiss();
         if (appPickerDialog != null) appPickerDialog.dismiss();
@@ -177,6 +185,14 @@ public final class MainActivity extends Activity {
         historyParams.topMargin = dp(12);
         control.addView(history, historyParams);
         history.setOnClickListener(v -> startActivity(new Intent(this, HistoryActivity.class)));
+        Button active = button("현재 알림에서 규칙 추가", false);
+        active.setId(R.id.active_notifications);
+        activeNotificationsButton = active;
+        active.setEnabled(activeNotificationsDialog == null && addRuleDialog == null);
+        LinearLayout.LayoutParams activeParams = new LinearLayout.LayoutParams(-1, -2);
+        activeParams.topMargin = dp(10);
+        control.addView(active, activeParams);
+        active.setOnClickListener(v -> showActiveNotifications());
 
         LinearLayout ruleHeader = new AdaptiveRow(this, false);
         ruleHeader.setGravity(Gravity.CENTER_VERTICAL);
@@ -184,7 +200,7 @@ public final class MainActivity extends Activity {
         ruleHeader.addView(header, new LinearLayout.LayoutParams(0, -2, 1));
         Button add = button("+ 규칙 추가", true);
         addRuleButton = add;
-        add.setEnabled(addRuleDialog == null);
+        add.setEnabled(addRuleDialog == null && activeNotificationsDialog == null);
         ruleHeader.addView(add, new LinearLayout.LayoutParams(-2, -2));
         root.addView(ruleHeader);
         add.setOnClickListener(v -> showAddDialog());
@@ -319,8 +335,9 @@ public final class MainActivity extends Activity {
 
     private void showRuleDialog(Rule original) {
         // Add and edit share one dialog owner, including rapid repeated taps.
-        if (addRuleDialog != null || isFinishing() || isDestroyed()) return;
+        if (addRuleDialog != null || activeNotificationsDialog != null || isFinishing() || isDestroyed()) return;
         final boolean editing = original != null;
+        final boolean literal = editing && original.literal;
         List<AppOption> apps = installedApps();
         final AppOption[] selected = {apps.get(0)};
         if (editing && !original.packageName.isEmpty()) {
@@ -349,7 +366,7 @@ public final class MainActivity extends Activity {
         }));
         LinearLayout phraseHeader = new LinearLayout(this);
         phraseHeader.setGravity(Gravity.CENTER_VERTICAL);
-        phraseHeader.addView(text("포함 문구 · , AND / ; OR", 14, MUTED, false),
+        phraseHeader.addView(text(literal ? "포함 문구 · 알림 문구 그대로 비교" : "포함 문구 · , AND / ; OR", 14, MUTED, false),
                 new LinearLayout.LayoutParams(0, -2, 1));
         TextView help = text("?", 19, MUTED, true);
         help.setGravity(Gravity.CENTER);
@@ -357,14 +374,17 @@ public final class MainActivity extends Activity {
         help.setPadding(0, dp(8), 0, dp(8));
         help.setBackground(shape(Color.rgb(235, 239, 245), 22));
         help.setContentDescription("문구 조건과 AND OR 우선순위 도움말");
-        help.setOnClickListener(v -> showRuleHelp());
+        help.setOnClickListener(v -> {
+            if (literal) Toast.makeText(this, "알림에서 만든 규칙은 쉼표·세미콜론·줄바꿈도 문구 그대로 비교합니다. 영문 대소문자는 구분하지 않습니다.", Toast.LENGTH_LONG).show();
+            else showRuleHelp();
+        });
         phraseHeader.addView(help, new LinearLayout.LayoutParams(dp(44), -2));
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1, -2);
         hp.topMargin = dp(12);
         content.addView(phraseHeader, hp);
         EditText phrase = new EditText(this);
         phrase.setId(R.id.rule_phrase);
-        phrase.setSingleLine(true);
+        phrase.setSingleLine(!literal);
         phrase.setHint("예: 택배,배송;배달,완료");
         phrase.setTextSize(16);
         if (editing) {
@@ -394,6 +414,7 @@ public final class MainActivity extends Activity {
             updatePickerStatus();
         };
         if (addRuleButton != null) addRuleButton.setEnabled(false);
+        if (activeNotificationsButton != null) activeNotificationsButton.setEnabled(false);
         // Rapid taps at the original Add location must not cancel/reopen it.
         // Explicit Cancel and the Android Back button still close the dialog.
         dialog.setCanceledOnTouchOutside(false);
@@ -404,6 +425,7 @@ public final class MainActivity extends Activity {
                 if (ruleHelpDialog != null) ruleHelpDialog.dismiss();
                 addRuleDialog = null;
                 if (addRuleButton != null) addRuleButton.setEnabled(true);
+                if (activeNotificationsButton != null) activeNotificationsButton.setEnabled(true);
             }
         });
         dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
@@ -414,7 +436,7 @@ public final class MainActivity extends Activity {
                 phrase.setError("문구를 입력해 주세요");
                 return;
             }
-            if (!RuleMatcher.isValidExpression(value)) {
+            if (!literal && !RuleMatcher.isValidExpression(value)) {
                 phrase.setError("구분자 앞뒤에 문구를 입력해 주세요. 빈 조건은 사용할 수 없습니다.");
                 return;
             }
@@ -432,7 +454,7 @@ public final class MainActivity extends Activity {
                     return;
                 }
                 savedRule = new Rule(original.id, selected[0].packageName, selected[0].label,
-                        value, rules.get(index).enabled);
+                        value, rules.get(index).enabled, literal);
                 rules.set(index, savedRule);
             } else {
                 savedRule = new Rule(System.currentTimeMillis(), selected[0].packageName,
@@ -452,6 +474,127 @@ public final class MainActivity extends Activity {
         dialog.show();
         // Show the form before querying packages or reading the on-disk label cache.
         catalog.subscribe(listener);
+    }
+
+    private void showActiveNotifications() {
+        if (activeNotificationsDialog != null || addRuleDialog != null || isFinishing() || isDestroyed()) return;
+        LinearLayout content = new LinearLayout(this) {
+            @Override protected void onMeasure(int widthSpec, int heightSpec) {
+                // AlertDialog bounds its custom panel after reserving title/actions.
+                // Fill that bound so the weighted list receives the remaining space.
+                if (View.MeasureSpec.getMode(heightSpec) == View.MeasureSpec.AT_MOST)
+                    heightSpec = View.MeasureSpec.makeMeasureSpec(View.MeasureSpec.getSize(heightSpec), View.MeasureSpec.EXACTLY);
+                super.onMeasure(widthSpec, heightSpec);
+            }
+        };
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(16), dp(8), dp(16), 0);
+        TextView status = text("현재 알림 확인 중…", 14, MUTED, false);
+        status.setId(R.id.active_notification_status);
+        status.setPadding(0, dp(8), 0, dp(12));
+        content.addView(status, new LinearLayout.LayoutParams(-1, -2));
+        ListView list = new ListView(this);
+        list.setId(R.id.active_notification_list);
+        content.addView(list, new LinearLayout.LayoutParams(-1, 0, 1));
+        List<FilterService.ActiveNotification> items = new ArrayList<>();
+        BaseAdapter adapter = new BaseAdapter() {
+            @Override public int getCount() { return items.size(); }
+            @Override public FilterService.ActiveNotification getItem(int position) { return items.get(position); }
+            @Override public long getItemId(int position) { return position; }
+            @Override public boolean areAllItemsEnabled() { return false; }
+            @Override public boolean isEnabled(int position) { return getItem(position).canCreateRule(); }
+            @Override public View getView(int position, View recycled, android.view.ViewGroup parent) {
+                FilterService.ActiveNotification item = getItem(position);
+                LinearLayout row = new LinearLayout(MainActivity.this);
+                row.setOrientation(LinearLayout.VERTICAL);
+                row.setMinimumHeight(dp(64));
+                row.setPadding(dp(8), dp(14), dp(8), dp(14));
+                row.addView(text(item.appName, 16, INK, true), new LinearLayout.LayoutParams(-1, -2));
+                row.addView(text(item.packageName, 12, MUTED, false), new LinearLayout.LayoutParams(-1, -2));
+                TextView body = text(!item.canCreateRule() ? "문구가 없어 규칙을 만들 수 없는 알림입니다." : item.text,
+                        14, MUTED, false);
+                body.setPadding(0, dp(6), 0, 0);
+                row.addView(body, new LinearLayout.LayoutParams(-1, -2));
+                row.setAlpha(item.canCreateRule() ? 1f : 0.6f);
+                return row;
+            }
+        };
+        list.setAdapter(adapter);
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("현재 알림 선택")
+                .setView(content).setNegativeButton("닫기", null)
+                .setPositiveButton("새로고침", null).create();
+        activeNotificationsDialog = dialog;
+        activeNotificationsButton.setEnabled(false);
+        if (addRuleButton != null) addRuleButton.setEnabled(false);
+        dialog.setCanceledOnTouchOutside(false);
+        dialog.setOnDismissListener(ignored -> {
+            if (activeNotificationsDialog == dialog) {
+                activeNotificationsDialog = null;
+                activeNotificationsRequest++;
+                items.clear();
+                if (activeNotificationsButton != null) activeNotificationsButton.setEnabled(true);
+                if (addRuleButton != null) addRuleButton.setEnabled(true);
+            }
+        });
+        Runnable refresh = () -> {
+            final int request = ++activeNotificationsRequest;
+            items.clear(); adapter.notifyDataSetChanged(); list.setEnabled(false);
+            status.setText("현재 알림 확인 중…");
+            status.setOnClickListener(null);
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
+            notificationLoader.execute(() -> {
+                List<FilterService.ActiveNotification> result;
+                try { result = FilterService.activeNotifications(); }
+                catch (RuntimeException unavailable) { result = null; }
+                final List<FilterService.ActiveNotification> snapshot = result;
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed() || activeNotificationsDialog != dialog
+                            || !dialog.isShowing() || request != activeNotificationsRequest) return;
+                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
+                    if (snapshot == null) {
+                        status.setText("알림을 읽을 수 없습니다. 여기를 눌러 설정에서 알림 접근을 허용한 뒤 다시 시도해 주세요.");
+                        status.setOnClickListener(v -> {
+                            dialog.dismiss();
+                            startActivity(new Intent(this, SettingsActivity.class));
+                        });
+                    } else {
+                        items.addAll(snapshot); adapter.notifyDataSetChanged(); list.setEnabled(true);
+                        status.setText(items.isEmpty() ? "현재 표시 중인 알림이 없습니다."
+                                : "선택 즉시 규칙을 저장합니다.");
+                    }
+                });
+            });
+        };
+        list.setOnItemClickListener((parent, view, position, id) -> {
+            if (activeNotificationsDialog != dialog || !dialog.isShowing() || !list.isEnabled()
+                    || position < 0 || position >= items.size() || !adapter.isEnabled(position)) return;
+            FilterService.ActiveNotification item = items.get(position);
+            list.setEnabled(false);
+            List<Rule> rules = store.load();
+            long nextId = System.currentTimeMillis();
+            for (Rule rule : rules) if (rule.id >= nextId) nextId = rule.id + 1;
+            Rule saved = new Rule(nextId, item.packageName, item.appName, item.text, true, true);
+            rules.add(saved);
+            store.save(rules);
+            dialog.dismiss();
+            render();
+            int count = FilterService.clearExistingForNewRule(saved);
+            Toast.makeText(this, store.isPaused() ? "규칙 추가됨 · 필터 일시정지 중입니다"
+                    : count < 0 ? "규칙 추가됨 · 알림 접근 연결을 확인해 주세요"
+                    : "규칙 추가됨 · 기존 알림 " + count + "개 삭제 요청", Toast.LENGTH_LONG).show();
+        });
+        dialog.show();
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> refresh.run());
+        dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+        View decor = dialog.getWindow().getDecorView();
+        decor.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            if (!dialog.isShowing()) return;
+            Rect visible = new Rect(); decor.getWindowVisibleDisplayFrame(visible);
+            int height = Math.min(dp(640), Math.round(visible.height() * 0.9f));
+            if (height > 0 && Math.abs(dialog.getWindow().getAttributes().height - height) > dp(2))
+                dialog.getWindow().setLayout(dialog.getWindow().getAttributes().width, height);
+        });
+        refresh.run();
     }
 
     private void showRuleHelp() {
