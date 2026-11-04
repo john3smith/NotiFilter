@@ -58,9 +58,12 @@ public final class MainActivity extends Activity {
     private EditText pickerSearch;
     private TextView pickerStatus;
     private boolean appsLoading=true,appsFailed;
+    private final java.util.Set<String> expandedApps = new java.util.HashSet<>();
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        if (state != null && state.getStringArrayList("expandedApps") != null)
+            expandedApps.addAll(state.getStringArrayList("expandedApps"));
         catalog=AppCatalog.get(this);
         catalog.refresh();
         store = new RuleStore(this);
@@ -71,6 +74,11 @@ public final class MainActivity extends Activity {
         super.onResume();
         if(catalog!=null)catalog.refresh();
         if (root != null) render();
+    }
+
+    @Override protected void onSaveInstanceState(Bundle state) {
+        state.putStringArrayList("expandedApps", new ArrayList<>(expandedApps));
+        super.onSaveInstanceState(state);
     }
 
     @Override protected void onDestroy() {
@@ -238,7 +246,35 @@ public final class MainActivity extends Activity {
             hp.topMargin = dp(7);
             empty.addView(hint, hp);
         } else {
-            for (Rule rule : rules) addRuleCard(rule);
+            java.util.Map<String, List<Rule>> groups = new java.util.LinkedHashMap<>();
+            for (Rule rule : rules)
+                groups.computeIfAbsent(rule.packageName, key -> new ArrayList<>()).add(rule);
+            expandedApps.retainAll(groups.keySet());
+            for (java.util.Map.Entry<String, List<Rule>> group : groups.entrySet()) {
+                String key = group.getKey();
+                List<Rule> members = group.getValue();
+                Rule first = members.get(0);
+                String name = key.isEmpty() ? "모든 앱" : first.appName.isEmpty() ? key : first.appName;
+                LinearLayout groupBox = card();
+                Button toggle = button("", false);
+                toggle.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+                LinearLayout contents = new LinearLayout(this);
+                contents.setOrientation(LinearLayout.VERTICAL);
+                Runnable updateGroup = () -> {
+                    boolean open = expandedApps.contains(key);
+                    toggle.setText(name + " · 규칙 " + members.size() + "개   " + (open ? "▴ 접기" : "▾ 펼치기"));
+                    toggle.setContentDescription(name + ", 규칙 " + members.size() + "개, " + (open ? "접기" : "펼치기"));
+                    contents.setVisibility(open ? View.VISIBLE : View.GONE);
+                };
+                groupBox.addView(toggle, new LinearLayout.LayoutParams(-1, -2));
+                groupBox.addView(contents, new LinearLayout.LayoutParams(-1, -2));
+                for (Rule rule : members) addRuleCard(rule, contents);
+                updateGroup.run();
+                toggle.setOnClickListener(v -> {
+                    if (!expandedApps.remove(key)) expandedApps.add(key);
+                    updateGroup.run();
+                });
+            }
         }
 
         TextView foot = text("안내: 알림이 게시된 직후 지우는 방식이라 잠깐 표시되거나 소리가 먼저 날 수 있습니다. 일부 시스템·지속 알림은 지워지지 않을 수 있습니다.", 12, MUTED, false);
@@ -271,8 +307,10 @@ public final class MainActivity extends Activity {
         return b;
     }
 
-    private void addRuleCard(Rule rule) {
+    private void addRuleCard(Rule rule, LinearLayout parent) {
         LinearLayout box = card();
+        root.removeView(box);
+        parent.addView(box);
         box.setTag(R.id.rule_card_id,rule.id);
         box.setOnClickListener(v -> {
             // A switch may have changed since this card was rendered.
@@ -287,7 +325,6 @@ public final class MainActivity extends Activity {
         row.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout names = new LinearLayout(this);
         names.setOrientation(LinearLayout.VERTICAL);
-        names.addView(text(rule.appName.isEmpty() ? "모든 앱" : rule.appName, 16, INK, true));
         TextView phrase = text("포함 문구: " + rule.phrase, 14, MUTED, false);
         LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-1, -2);
         pp.topMargin = dp(5);
@@ -304,10 +341,16 @@ public final class MainActivity extends Activity {
             store.save(rules);
             if (value) showScanResult(FilterService.clearExistingForNewRule(rule.withEnabled(true)));
         });
-        TextView delete = text("삭제", 13, Color.rgb(193, 60, 60), true);
-        delete.setGravity(Gravity.END);
-        delete.setPadding(0, dp(12), 0, 0);
-        box.addView(delete);
+        LinearLayout actions = new LinearLayout(this);
+        Button edit = button("수정", false);
+        edit.setOnClickListener(v -> box.performClick());
+        Button delete = button("삭제", false);
+        delete.setTextColor(Color.rgb(193, 60, 60));
+        actions.addView(edit,new LinearLayout.LayoutParams(0,-2,1));
+        LinearLayout.LayoutParams deleteParams=new LinearLayout.LayoutParams(0,-2,1);
+        deleteParams.leftMargin=dp(8);
+        actions.addView(delete,deleteParams);
+        box.addView(actions);
         delete.setOnClickListener(v -> showDeleteRuleDialog(rule));
     }
 
@@ -465,6 +508,7 @@ public final class MainActivity extends Activity {
             store.save(rules);
             dialog.dismiss();
             int existing = savedRule.enabled ? FilterService.clearExistingForNewRule(savedRule) : 0;
+            expandedApps.add(savedRule.packageName);
             String result = editing ? "규칙 수정됨" : "규칙 추가됨";
             String message = !savedRule.enabled ? result + " · 비활성 상태 유지"
                     : existing < 0 ? result + " · 기존 알림 확인에는 알림 접근이 필요합니다"
@@ -577,6 +621,7 @@ public final class MainActivity extends Activity {
             Rule saved = new Rule(nextId, item.packageName, item.appName, item.text, true, true);
             rules.add(saved);
             store.save(rules);
+            expandedApps.add(saved.packageName);
             dialog.dismiss();
             render();
             int count = FilterService.clearExistingForNewRule(saved);
