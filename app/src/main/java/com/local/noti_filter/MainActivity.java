@@ -215,10 +215,20 @@ public final class MainActivity extends Activity {
         active.setOnClickListener(v -> showActiveNotifications());
 
         LinearLayout sortRow=new AdaptiveRow(this, true);
+        LinearLayout sortPanel = new LinearLayout(this);
+        sortPanel.setOrientation(LinearLayout.VERTICAL);
+        sortPanel.setPadding(dp(12), dp(10), dp(12), dp(6));
+        sortPanel.setBackground(shape(Color.rgb(239, 242, 246), 12));
+        sortPanel.addView(text("목록 정렬", 12, MUTED, true));
         RuleOrder.Mode selectedOrder=store.sortOrder();
         int[] sortIds={R.id.sort_newest,R.id.sort_oldest,R.id.sort_name};
         for (RuleOrder.Mode mode : RuleOrder.Mode.values()) {
             Button choice=button(mode.label, mode==selectedOrder);
+            choice.setTextSize(13);
+            choice.setPadding(dp(8), dp(4), dp(8), dp(4));
+            choice.setTextColor(mode==selectedOrder ? Color.WHITE : MUTED);
+            choice.setBackground(new RippleDrawable(ColorStateList.valueOf(0x22334455),
+                    shape(mode==selectedOrder ? INK : Color.TRANSPARENT, 8), null));
             choice.setId(sortIds[mode.ordinal()]);
             choice.setSelected(mode==selectedOrder);
             choice.setContentDescription(mode.label + (mode==selectedOrder ? " 선택됨" : " 정렬"));
@@ -234,8 +244,11 @@ public final class MainActivity extends Activity {
             });
         }
         LinearLayout.LayoutParams sortParams=new LinearLayout.LayoutParams(-1,-2);
-        sortParams.topMargin=dp(10);sortParams.bottomMargin=dp(12);
-        root.addView(sortRow,sortParams);
+        sortParams.topMargin=dp(24);sortParams.bottomMargin=dp(16);
+        LinearLayout.LayoutParams sortOptions = new LinearLayout.LayoutParams(-1, -2);
+        sortOptions.topMargin = dp(6);
+        sortPanel.addView(sortRow,sortOptions);
+        root.addView(sortPanel,sortParams);
 
         List<Rule> rules = RuleOrder.sorted(store.load(),selectedOrder);
         if (rules.isEmpty()) {
