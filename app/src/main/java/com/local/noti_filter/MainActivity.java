@@ -256,17 +256,38 @@ public final class MainActivity extends Activity {
                 Rule first = members.get(0);
                 String name = key.isEmpty() ? "모든 앱" : first.appName.isEmpty() ? key : first.appName;
                 LinearLayout groupBox = card();
+                LinearLayout groupHeader = new LinearLayout(this);
+                groupHeader.setGravity(Gravity.CENTER_VERTICAL);
+                groupHeader.setPadding(dp(12), dp(8), dp(8), dp(8));
+                groupHeader.setBackground(shape(Color.rgb(225, 235, 252), 12));
+                android.widget.ImageView icon = new android.widget.ImageView(this);
+                android.graphics.drawable.Drawable appIcon = getPackageManager().getDefaultActivityIcon();
+                if (!key.isEmpty()) {
+                    try { appIcon = getPackageManager().getApplicationIcon(key); }
+                    catch (android.content.pm.PackageManager.NameNotFoundException ignored) { }
+                }
+                icon.setImageDrawable(appIcon);
+                icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+                groupHeader.addView(icon, new LinearLayout.LayoutParams(dp(32), dp(32)));
+                LinearLayout groupTitle = new LinearLayout(this);
+                groupTitle.setOrientation(LinearLayout.VERTICAL);
+                groupTitle.setPadding(dp(10), 0, dp(8), 0);
+                groupTitle.addView(text(name, 16, INK, true));
+                groupTitle.addView(text("규칙 " + members.size() + "개", 12, MUTED, false));
+                groupHeader.addView(groupTitle, new LinearLayout.LayoutParams(0, -2, 1));
                 Button toggle = button("", false);
-                toggle.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+                toggle.setTextSize(12);
+                toggle.setPadding(dp(8), dp(4), dp(8), dp(4));
+                groupHeader.addView(toggle, new LinearLayout.LayoutParams(-2, -2));
                 LinearLayout contents = new LinearLayout(this);
                 contents.setOrientation(LinearLayout.VERTICAL);
                 Runnable updateGroup = () -> {
                     boolean open = expandedApps.contains(key);
-                    toggle.setText(name + " · 규칙 " + members.size() + "개   " + (open ? "▴ 접기" : "▾ 펼치기"));
+                    toggle.setText(open ? "접기 ▴" : "펼치기 ▾");
                     toggle.setContentDescription(name + ", 규칙 " + members.size() + "개, " + (open ? "접기" : "펼치기"));
                     contents.setVisibility(open ? View.VISIBLE : View.GONE);
                 };
-                groupBox.addView(toggle, new LinearLayout.LayoutParams(-1, -2));
+                groupBox.addView(groupHeader, new LinearLayout.LayoutParams(-1, -2));
                 groupBox.addView(contents, new LinearLayout.LayoutParams(-1, -2));
                 for (Rule rule : members) addRuleCard(rule, contents);
                 updateGroup.run();
@@ -311,6 +332,9 @@ public final class MainActivity extends Activity {
         LinearLayout box = card();
         root.removeView(box);
         parent.addView(box);
+        box.setElevation(0);
+        box.setBackground(shape(Color.rgb(247, 249, 252), 10));
+        box.setPadding(dp(12), dp(12), dp(12), dp(4));
         box.setTag(R.id.rule_card_id,rule.id);
         box.setOnClickListener(v -> {
             // A switch may have changed since this card was rendered.
@@ -325,7 +349,7 @@ public final class MainActivity extends Activity {
         row.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout names = new LinearLayout(this);
         names.setOrientation(LinearLayout.VERTICAL);
-        TextView phrase = text("포함 문구: " + rule.phrase, 14, MUTED, false);
+        TextView phrase = text("포함 문구: " + rule.phrase, 15, INK, false);
         LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-1, -2);
         pp.topMargin = dp(5);
         names.addView(phrase, pp);
@@ -342,12 +366,19 @@ public final class MainActivity extends Activity {
             if (value) showScanResult(FilterService.clearExistingForNewRule(rule.withEnabled(true)));
         });
         LinearLayout actions = new LinearLayout(this);
+        actions.setGravity(Gravity.END);
         Button edit = button("수정", false);
         edit.setOnClickListener(v -> box.performClick());
         Button delete = button("삭제", false);
         delete.setTextColor(Color.rgb(193, 60, 60));
-        actions.addView(edit,new LinearLayout.LayoutParams(0,-2,1));
-        LinearLayout.LayoutParams deleteParams=new LinearLayout.LayoutParams(0,-2,1);
+        for (Button action : new Button[]{edit, delete}) {
+            action.setTextSize(12);
+            action.setPadding(dp(12), 0, dp(12), 0);
+            action.setBackground(new RippleDrawable(ColorStateList.valueOf(0x222563EB),
+                    shape(Color.TRANSPARENT, 8), null));
+        }
+        actions.addView(edit,new LinearLayout.LayoutParams(-2,-2));
+        LinearLayout.LayoutParams deleteParams=new LinearLayout.LayoutParams(-2,-2);
         deleteParams.leftMargin=dp(8);
         actions.addView(delete,deleteParams);
         box.addView(actions);
