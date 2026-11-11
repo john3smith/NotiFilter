@@ -179,7 +179,8 @@ public final class MainActivity extends Activity {
         controlRow.setGravity(Gravity.CENTER_VERTICAL);
         TextView controlLabel = text("필터 일시정지", 17, INK, true);
         controlRow.addView(controlLabel, new LinearLayout.LayoutParams(0, -2, 1));
-        Switch paused = new Switch(this);
+        Switch paused = toggleSwitch();
+        paused.setId(R.id.filter_paused);
         paused.setChecked(store.isPaused());
         controlRow.addView(paused);
         control.addView(controlRow);
@@ -341,15 +342,36 @@ public final class MainActivity extends Activity {
         return b;
     }
 
+    private Switch toggleSwitch() {
+        Switch toggle = new Switch(this);
+        toggle.setMinWidth(dp(76));
+        toggle.setMinimumWidth(dp(76));
+        toggle.setMinHeight(dp(56));
+        toggle.setMinimumHeight(dp(56));
+        toggle.setPadding(dp(10), dp(10), dp(10), dp(10));
+        toggle.setSwitchMinWidth(dp(56));
+        GradientDrawable thumb = shape(Color.WHITE, 13);
+        thumb.setSize(dp(26), dp(26));
+        toggle.setThumbDrawable(thumb);
+        GradientDrawable track = shape(Color.WHITE, 9);
+        track.setSize(dp(56), dp(18));
+        toggle.setTrackDrawable(track);
+        int[][] states = {new int[]{android.R.attr.state_checked}, new int[]{}};
+        toggle.setThumbTintList(new ColorStateList(states, new int[]{BLUE, Color.rgb(112, 122, 138)}));
+        toggle.setTrackTintList(new ColorStateList(states,
+                new int[]{Color.rgb(195, 214, 255), Color.rgb(218, 223, 231)}));
+        return toggle;
+    }
+
     private void addRuleCard(Rule rule, LinearLayout parent) {
         LinearLayout box = card();
         root.removeView(box);
         parent.addView(box);
         box.setElevation(0);
         box.setBackground(shape(Color.rgb(247, 249, 252), 10));
-        box.setPadding(dp(12), dp(12), dp(12), dp(4));
+        box.setPadding(dp(12), dp(12), dp(12), dp(12));
         box.setTag(R.id.rule_card_id,rule.id);
-        box.setOnClickListener(v -> {
+        Runnable editRule = () -> {
             // A switch may have changed since this card was rendered.
             for (Rule current : store.load()) {
                 if (current.id == rule.id) {
@@ -357,17 +379,29 @@ public final class MainActivity extends Activity {
                     return;
                 }
             }
-        });
+        };
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout names = new LinearLayout(this);
+        names.setId(R.id.rule_content);
         names.setOrientation(LinearLayout.VERTICAL);
+        names.setMinimumHeight(dp(56));
+        names.setPadding(dp(4), dp(4), dp(4), dp(4));
+        names.setGravity(Gravity.CENTER_VERTICAL);
+        names.setBackground(new RippleDrawable(ColorStateList.valueOf(0x222563EB),
+                shape(Color.TRANSPARENT, 8), null));
+        names.setFocusable(true);
+        names.setContentDescription("규칙 수정: " + rule.appName + " " + rule.phrase);
+        names.setOnClickListener(v -> editRule.run());
         TextView phrase = text("포함 문구: " + rule.phrase, 15, INK, false);
         LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-1, -2);
         pp.topMargin = dp(5);
         names.addView(phrase, pp);
-        row.addView(names, new LinearLayout.LayoutParams(0, -2, 1));
-        Switch enabled = new Switch(this);
+        LinearLayout.LayoutParams namesParams = new LinearLayout.LayoutParams(0, -2, 1);
+        namesParams.setMarginEnd(dp(8));
+        row.addView(names, namesParams);
+        Switch enabled = toggleSwitch();
+        enabled.setId(R.id.rule_enabled);
         enabled.setChecked(rule.enabled);
         enabled.setContentDescription(rule.appName + " " + rule.phrase + " 규칙 활성화");
         row.addView(enabled);
@@ -381,7 +415,7 @@ public final class MainActivity extends Activity {
         LinearLayout actions = new LinearLayout(this);
         actions.setGravity(Gravity.END);
         Button edit = button("수정", false);
-        edit.setOnClickListener(v -> box.performClick());
+        edit.setOnClickListener(v -> editRule.run());
         Button delete = button("삭제", false);
         delete.setTextColor(Color.rgb(193, 60, 60));
         for (Button action : new Button[]{edit, delete}) {
@@ -411,6 +445,7 @@ public final class MainActivity extends Activity {
                     render();
                 }).create();
         deleteRuleDialog = confirmation;
+        confirmation.setCanceledOnTouchOutside(false);
         confirmation.setOnDismissListener(dialog -> {
             if (deleteRuleDialog == confirmation) deleteRuleDialog = null;
         });
