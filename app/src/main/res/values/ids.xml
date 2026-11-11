@@ -1,4 +1,7 @@
 <resources>
+    <item name="filter_paused" type="id" />
+    <item name="rule_enabled" type="id" />
+    <item name="rule_content" type="id" />
     <item name="active_notifications" type="id" />
     <item name="active_notification_list" type="id" />
     <item name="active_notification_status" type="id" />

@@ -13,6 +13,7 @@ import android.graphics.drawable.Drawable;
 import android.os.SystemClock;
 
 public final class FilterService extends NotificationListenerService {
+    private static final long HIDE_DURATION_MS = 24L * 60 * 60 * 1000;
     private static volatile WeakReference<FilterService> connected = new WeakReference<>(null);
     private RuleStore rules;
     @Override public void onCreate() { super.onCreate(); rules = new RuleStore(this); }
@@ -51,13 +52,13 @@ public final class FilterService extends NotificationListenerService {
         RuleStore store = rules;
         if (store.isPaused()) return;
         String matched = matchingText(store.load(), sbn);
-        if (matched != null) requestRemoval(sbn, matched);
+        if (matched != null) requestHide(sbn, matched);
     }
 
     @Override public void onNotificationRemoved(StatusBarNotification sbn, RankingMap ranking, int reason) {
         if (sbn == null) return;
         Pending record = pending.remove(sbn.getKey());
-        if (record == null || reason != REASON_LISTENER_CANCEL
+        if (record == null || reason != REASON_SNOOZED
                 || SystemClock.elapsedRealtime() - record.requestedAt > 30000) return;
         String label = record.pkg;
         Drawable icon = getDrawable(R.drawable.app_icon);
@@ -71,10 +72,13 @@ public final class FilterService extends NotificationListenerService {
         HistoryStore.get(this).record(System.currentTimeMillis(), record.pkg, label, record.text, icon);
     }
 
-    private boolean requestRemoval(StatusBarNotification sbn, String matchedText) {
+    private boolean requestHide(StatusBarNotification sbn, String matchedText) {
         long now = SystemClock.elapsedRealtime();
         if (!pending.offer(sbn.getKey(), () -> new Pending(sbn, matchedText, now), now)) return false;
-        try { cancelNotification(sbn.getKey()); return true; }
+        // Snoozing retains system state across updates of the same notification,
+        // rather than dismissing it and prompting the source to immediately repost.
+        // Only the confirmed REASON_SNOOZED callback is recorded as handled.
+        try { snoozeNotification(sbn.getKey(), HIDE_DURATION_MS); return true; }
         catch (SecurityException | IllegalStateException unavailable) {
             pending.remove(sbn.getKey()); return false;
         }
@@ -83,6 +87,11 @@ public final class FilterService extends NotificationListenerService {
     // User-triggered scans only; disabled rules and the global pause are respected.
     public static int clearExistingForNewRule(Rule rule) {
         return clearExisting(Collections.singletonList(rule));
+    }
+
+    // Explicit picker action: scan only this rule once, without resuming the filter.
+    public static int applyCurrentNotificationRuleOnce(Rule rule) {
+        return clearExisting(Collections.singletonList(rule), false);
     }
 
     public static int clearExistingForEnabledRules() {
@@ -137,9 +146,13 @@ public final class FilterService extends NotificationListenerService {
     }
 
     private static int clearExisting(List<Rule> rules) {
+        return clearExisting(rules, true);
+    }
+
+    private static int clearExisting(List<Rule> rules, boolean respectPause) {
         FilterService service = connected.get();
         if (service == null) return -1;
-        if (service.rules.isPaused()) return 0;
+        if (respectPause && service.rules.isPaused()) return 0;
         StatusBarNotification[] active;
         try {
             active = service.getActiveNotifications();
@@ -151,7 +164,7 @@ public final class FilterService extends NotificationListenerService {
         for (StatusBarNotification sbn : active) {
             if (sbn == null || service.getPackageName().equals(sbn.getPackageName())) continue;
             String matched = matchingText(rules, sbn);
-            if (matched != null && service.requestRemoval(sbn, matched)) requested++;
+            if (matched != null && service.requestHide(sbn, matched)) requested++;
         }
         return requested;
     }
