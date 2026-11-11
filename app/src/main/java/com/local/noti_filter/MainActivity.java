@@ -648,8 +648,8 @@ public final class MainActivity extends Activity {
                         });
                     } else {
                         items.addAll(snapshot); adapter.notifyDataSetChanged(); list.setEnabled(true);
-                        status.setText(items.isEmpty() ? "현재 표시 중인 알림이 없습니다."
-                                : "선택 즉시 규칙을 저장합니다.");
+                        status.setText(items.isEmpty() ? "읽을 수 있는 알림이 없습니다. 보안폴더 알림이 없다면 보안폴더의 알림 설정을 확인해 주세요."
+                                : "선택하면 규칙을 저장합니다. 내용 숨김 알림은 ‘내용 숨김 표시’를 선택하세요.");
                     }
                 });
             });
