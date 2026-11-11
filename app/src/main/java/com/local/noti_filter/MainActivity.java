@@ -649,7 +649,7 @@ public final class MainActivity extends Activity {
                     } else {
                         items.addAll(snapshot); adapter.notifyDataSetChanged(); list.setEnabled(true);
                         status.setText(items.isEmpty() ? "읽을 수 있는 알림이 없습니다. 보안폴더 알림이 없다면 보안폴더의 알림 설정을 확인해 주세요."
-                                : "선택하면 규칙을 저장합니다. 내용 숨김 알림은 ‘내용 숨김 표시’를 선택하세요.");
+                                : "선택하면 규칙 저장 후 1회 적용합니다. 일시정지는 유지됩니다. 내용 숨김 알림은 ‘내용 숨김 표시’를 선택하세요.");
                     }
                 });
             });
@@ -668,10 +668,11 @@ public final class MainActivity extends Activity {
             expandedApps.add(saved.packageName);
             dialog.dismiss();
             render();
-            int count = FilterService.clearExistingForNewRule(saved);
-            Toast.makeText(this, store.isPaused() ? "규칙 추가됨 · 필터 일시정지 중입니다"
-                    : count < 0 ? "규칙 추가됨 · 알림 접근 연결을 확인해 주세요"
-                    : "규칙 추가됨 · 기존 알림 " + count + "개 삭제 요청", Toast.LENGTH_LONG).show();
+            int count = FilterService.applyCurrentNotificationRuleOnce(saved);
+            String message = count < 0 ? "규칙 추가됨 · 1회 적용하려면 알림 접근 연결을 확인해 주세요"
+                    : "규칙 추가됨 · 1회 적용: 기존 알림 " + count + "개 삭제 요청";
+            if (store.isPaused()) message += " · 일시정지 유지";
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
         });
         dialog.show();
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> refresh.run());

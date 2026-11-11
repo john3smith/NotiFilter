@@ -85,6 +85,11 @@ public final class FilterService extends NotificationListenerService {
         return clearExisting(Collections.singletonList(rule));
     }
 
+    // Explicit picker action: scan only this rule once, without resuming the filter.
+    public static int applyCurrentNotificationRuleOnce(Rule rule) {
+        return clearExisting(Collections.singletonList(rule), false);
+    }
+
     public static int clearExistingForEnabledRules() {
         FilterService service = connected.get();
         return service == null ? -1 : clearExisting(service.rules.load());
@@ -137,9 +142,13 @@ public final class FilterService extends NotificationListenerService {
     }
 
     private static int clearExisting(List<Rule> rules) {
+        return clearExisting(rules, true);
+    }
+
+    private static int clearExisting(List<Rule> rules, boolean respectPause) {
         FilterService service = connected.get();
         if (service == null) return -1;
-        if (service.rules.isPaused()) return 0;
+        if (respectPause && service.rules.isPaused()) return 0;
         StatusBarNotification[] active;
         try {
             active = service.getActiveNotifications();
