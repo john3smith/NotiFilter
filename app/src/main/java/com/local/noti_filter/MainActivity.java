@@ -162,7 +162,7 @@ public final class MainActivity extends Activity {
         heading.addView(settings, settingsParams);
         settings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
         root.addView(heading);
-        TextView subtitle = text("원하는 앱과 문구를 선택하면 일치하는 알림을 자동으로 지웁니다.", 14, MUTED, false);
+        TextView subtitle = text("원하는 앱과 문구를 선택하면 일치하는 알림을 자동으로 숨깁니다.", 14, MUTED, false);
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, -2);
         sp.topMargin = dp(8); sp.bottomMargin = dp(12);
         root.addView(subtitle, sp);
@@ -189,7 +189,7 @@ public final class MainActivity extends Activity {
             store.setPaused(checked);
             if (!checked) showScanResult(FilterService.clearExistingForEnabledRules());
         });
-        Button history = button("삭제한 알림 이력", false);
+        Button history = button("알림 처리 이력", false);
         LinearLayout.LayoutParams historyParams = new LinearLayout.LayoutParams(-1, -2);
         historyParams.topMargin = dp(12);
         control.addView(history, historyParams);
@@ -312,7 +312,7 @@ public final class MainActivity extends Activity {
             }
         }
 
-        TextView foot = text("안내: 알림이 게시된 직후 지우는 방식이라 잠깐 표시되거나 소리가 먼저 날 수 있습니다. 일부 시스템·지속 알림은 지워지지 않을 수 있습니다.", 12, MUTED, false);
+        TextView foot = text("안내: 알림을 24시간씩 숨기며, 필터 작동 중 다시 나타나면 다시 숨깁니다. 일시정지·규칙 해제 후에도 이미 숨긴 알림은 시간이 끝난 뒤 나타날 수 있습니다. 일부 시스템 알림은 숨길 수 없습니다.", 12, MUTED, false);
         LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
         fp.topMargin = dp(8);
         root.addView(foot, fp);
@@ -591,7 +591,7 @@ public final class MainActivity extends Activity {
             String result = editing ? "규칙 수정됨" : "규칙 추가됨";
             String message = !savedRule.enabled ? result + " · 비활성 상태 유지"
                     : existing < 0 ? result + " · 기존 알림 확인에는 알림 접근이 필요합니다"
-                    : result + " · 기존 알림 " + existing + "개 삭제 요청";
+                    : result + " · 기존 알림 " + existing + "개 숨김 요청";
             Toast.makeText(this, message, Toast.LENGTH_LONG).show();
             render();
         }));
@@ -705,7 +705,7 @@ public final class MainActivity extends Activity {
             render();
             int count = FilterService.applyCurrentNotificationRuleOnce(saved);
             String message = count < 0 ? "규칙 추가됨 · 1회 적용하려면 알림 접근 연결을 확인해 주세요"
-                    : "규칙 추가됨 · 1회 적용: 기존 알림 " + count + "개 삭제 요청";
+                    : "규칙 추가됨 · 1회 적용: 기존 알림 " + count + "개 숨김 요청";
             if (store.isPaused()) message += " · 일시정지 유지";
             Toast.makeText(this, message, Toast.LENGTH_LONG).show();
         });
@@ -756,7 +756,7 @@ public final class MainActivity extends Activity {
 
     private void showScanResult(int count) {
         Toast.makeText(this, count < 0 ? "기존 알림을 검사하려면 알림 접근 연결이 필요합니다."
-                : "기존 알림 " + count + "개 삭제 요청 · 실제 삭제 확인 후 이력에 기록합니다.", Toast.LENGTH_LONG).show();
+                : "기존 알림 " + count + "개 숨김 요청 · 실제 숨김 확인 후 이력에 기록합니다.", Toast.LENGTH_LONG).show();
     }
 
     private void showAppPicker(List<AppOption> apps, AppSelection onSelected) {

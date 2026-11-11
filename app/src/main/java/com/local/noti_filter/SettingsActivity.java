@@ -110,7 +110,7 @@ public final class SettingsActivity extends Activity {
         // three-button footer can exceed a short window when large text stacks it.
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(24), dp(8), dp(24), dp(16));
-        content.addView(text("규칙 검사를 위해 알림의 앱·제목·본문을 읽고, 일치하는 알림을 제거합니다. 삭제한 알림 내용은 기기 내부 이력에 최대 1,000개 저장하며 이력 화면에서 지울 수 있습니다. 개발자 서버로 전송하지 않습니다. 권한을 거부하면 자동 필터만 사용할 수 없으며 Android 설정에서 언제든 해제할 수 있습니다.", 18, INK, false),
+        content.addView(text("규칙 검사를 위해 알림의 앱·제목·본문을 읽고, 일치하는 알림을 24시간씩 숨깁니다. 숨김이 확인된 알림 내용은 기기 내부 이력에 최대 1,000개 저장하며 이력 화면에서 지울 수 있습니다. 개발자 서버로 전송하지 않습니다. 권한을 거부하면 자동 필터만 사용할 수 없으며 Android 설정에서 언제든 해제할 수 있습니다.", 18, INK, false),
                 new LinearLayout.LayoutParams(-1, -2));
         ScrollView scroll = new ScrollView(this); scroll.addView(content);
         AlertDialog disclosure = new AlertDialog.Builder(this).setTitle("알림 접근 권한 사용 안내")

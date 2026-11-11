@@ -40,20 +40,20 @@ public final class HistoryActivity extends Activity {
         root.setBackgroundColor(Color.rgb(247, 249, 252));
         LinearLayout header = new AdaptiveRow(this, false);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = label("삭제한 알림 이력", 23, true);
+        TextView title = label("알림 처리 이력", 23, true);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         Button refresh = new Button(this); refresh.setText("새로고침");
         header.addView(refresh); root.addView(header);
         refresh.setOnClickListener(v -> refresh());
         status = label("불러오는 중…", 13, false); root.addView(status);
-        root.addView(label("삭제 확인 시간 · 최근 1,000개 · 기기 내부에만 저장", 12, false));
+        root.addView(label("처리 확인 시간 · 최근 1,000개 · 이전 버전 기록 포함", 12, false));
         Button clear = new Button(this); clear.setText("저장된 이력 모두 삭제");
         root.addView(clear);
         clear.setOnClickListener(v -> {
             if (isFinishing() || isDestroyed() || clearDialog != null) return;
             clearDialog = new AlertDialog.Builder(this)
                 .setTitle("저장된 알림 이력을 삭제할까요?")
-                .setMessage("기기 내부에 보관된 알림 내용과 아이콘을 삭제합니다. 필터 규칙은 유지되며 새로 제거되는 알림은 다시 기록될 수 있습니다.")
+                .setMessage("기기 내부에 보관된 알림 내용과 아이콘을 삭제합니다. 필터 규칙은 유지되며 새로 숨긴 알림은 다시 기록될 수 있습니다.")
                 .setNegativeButton("취소", null)
                 .setPositiveButton("삭제", (dialog, which) -> {
                     clear.setEnabled(false);
@@ -91,7 +91,7 @@ public final class HistoryActivity extends Activity {
         HistoryStore.get(this).load(() -> current == requestId, result -> {
             if (isFinishing() || isDestroyed() || current != requestId) return;
             entries.clear(); entries.addAll(result); adapter.notifyDataSetChanged();
-            status.setText(entries.isEmpty() ? "아직 삭제한 알림이 없습니다." : "삭제 이력 " + entries.size() + "개 · 최신순");
+            status.setText(entries.isEmpty() ? "아직 처리한 알림이 없습니다." : "처리 이력 " + entries.size() + "개 · 최신순");
         }, () -> {
             if (!isFinishing() && !isDestroyed() && current == requestId) status.setText("이력을 불러오지 못했습니다. 다시 시도해 주세요.");
         });
