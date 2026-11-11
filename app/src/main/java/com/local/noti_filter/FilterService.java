@@ -20,8 +20,8 @@ public final class FilterService extends NotificationListenerService {
     private static final class Pending {
         final String pkg, text;
         final long requestedAt;
-        Pending(StatusBarNotification sbn, long now) {
-            pkg = sbn.getPackageName(); text = notificationText(sbn);
+        Pending(StatusBarNotification sbn, String matchedText, long now) {
+            pkg = sbn.getPackageName(); text = matchedText;
             requestedAt = now;
         }
     }
@@ -29,6 +29,9 @@ public final class FilterService extends NotificationListenerService {
     @Override public void onListenerConnected() {
         super.onListenerConnected();
         connected = new WeakReference<>(this);
+        // A reconnect (including profile availability changes) need not repost
+        // notifications that were already present while the listener was offline.
+        clearExistingForEnabledRules();
     }
 
     @Override public void onListenerDisconnected() {
@@ -47,7 +50,8 @@ public final class FilterService extends NotificationListenerService {
         if (sbn == null || getPackageName().equals(sbn.getPackageName())) return;
         RuleStore store = rules;
         if (store.isPaused()) return;
-        if (matches(store.load(), sbn)) requestRemoval(sbn);
+        String matched = matchingText(store.load(), sbn);
+        if (matched != null) requestRemoval(sbn, matched);
     }
 
     @Override public void onNotificationRemoved(StatusBarNotification sbn, RankingMap ranking, int reason) {
@@ -67,9 +71,9 @@ public final class FilterService extends NotificationListenerService {
         HistoryStore.get(this).record(System.currentTimeMillis(), record.pkg, label, record.text, icon);
     }
 
-    private boolean requestRemoval(StatusBarNotification sbn) {
+    private boolean requestRemoval(StatusBarNotification sbn, String matchedText) {
         long now = SystemClock.elapsedRealtime();
-        if (!pending.offer(sbn.getKey(), () -> new Pending(sbn, now), now)) return false;
+        if (!pending.offer(sbn.getKey(), () -> new Pending(sbn, matchedText, now), now)) return false;
         try { cancelNotification(sbn.getKey()); return true; }
         catch (SecurityException | IllegalStateException unavailable) {
             pending.remove(sbn.getKey()); return false;
@@ -118,7 +122,14 @@ public final class FilterService extends NotificationListenerService {
                 String label = pkg;
                 try { label = pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString(); }
                 catch (PackageManager.NameNotFoundException | RuntimeException unavailable) { /* Use package. */ }
-                result.add(new ActiveNotification(pkg, label, notificationText(sbn).trim(), sbn.getPostTime()));
+                String original = notificationText(sbn.getNotification()).trim();
+                String visible = publicText(sbn.getNotification()).trim();
+                if (!sbn.getUser().equals(android.os.Process.myUserHandle())) label += " · 다른 프로필";
+                result.add(new ActiveNotification(pkg, label,
+                        original.isEmpty() ? visible : original, sbn.getPostTime()));
+                if (!original.isEmpty() && !visible.isEmpty() && !visible.equals(original)) {
+                    result.add(new ActiveNotification(pkg, label + " · 내용 숨김 표시", visible, sbn.getPostTime()));
+                }
             }
             result.sort((a, b) -> Long.compare(b.postedAt, a.postedAt));
             return result;
@@ -139,17 +150,29 @@ public final class FilterService extends NotificationListenerService {
         int requested = 0;
         for (StatusBarNotification sbn : active) {
             if (sbn == null || service.getPackageName().equals(sbn.getPackageName())) continue;
-            if (matches(rules, sbn) && service.requestRemoval(sbn)) requested++;
+            String matched = matchingText(rules, sbn);
+            if (matched != null && service.requestRemoval(sbn, matched)) requested++;
         }
         return requested;
     }
 
-    private static boolean matches(List<Rule> rules, StatusBarNotification sbn) {
-        return RuleMatcher.matches(rules, sbn.getPackageName(), notificationText(sbn));
+    private static String matchingText(List<Rule> rules, StatusBarNotification sbn) {
+        String original = notificationText(sbn.getNotification());
+        if (RuleMatcher.matches(rules, sbn.getPackageName(), original)) return original;
+        String visible = publicText(sbn.getNotification());
+        // Each representation must match independently. Combining them could
+        // satisfy an AND rule using words that never appear together on screen.
+        return !visible.isEmpty() && RuleMatcher.matches(rules, sbn.getPackageName(), visible)
+                ? visible : null;
     }
 
-    private static String notificationText(StatusBarNotification sbn) {
-        Notification notification = sbn.getNotification();
+    private static String publicText(Notification notification) {
+        // Read only the public replacement supplied by Android; never recover
+        // protected content or recursively follow an untrusted publicVersion.
+        return notification == null ? "" : notificationText(notification.publicVersion);
+    }
+
+    private static String notificationText(Notification notification) {
         if (notification == null) return "";
         Bundle extras = notification.extras;
         if (extras == null) return "";
