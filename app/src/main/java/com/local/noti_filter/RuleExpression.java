@@ -4,40 +4,37 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 
-/** Immutable parsed OR-of-AND expression, with a bounded shared parse cache. */
+/** Immutable parsed AND expression (";"-separated terms), with a bounded shared parse cache. */
 final class RuleExpression {
+    static final String AND = ";";
     private static final Map<String, RuleExpression> CACHE =
             new LinkedHashMap<String, RuleExpression>(128, .75f, true) {
                 @Override protected boolean removeEldestEntry(Map.Entry<String, RuleExpression> entry) {
                     return size() > 128;
                 }
             };
-    private final String[][] groups;
-    private RuleExpression(String[][] groups) { this.groups = groups; }
+    private final String[] terms;
+    private RuleExpression(String[] terms) { this.terms = terms; }
 
     static synchronized RuleExpression compile(String expression) {
         if (expression == null) return new RuleExpression(null);
         RuleExpression cached = CACHE.get(expression);
         if (cached != null) return cached;
-        String[][] parsed = parse(expression);
+        String[] parsed = parse(expression);
         RuleExpression result = new RuleExpression(parsed);
         CACHE.put(expression, result);
         return result;
     }
-    private static String[][] parse(String expression) {
+    private static String[] parse(String expression) {
         if (expression.trim().isEmpty()) return null;
-        String[] or = expression.split(";", -1);
-        String[][] groups = new String[or.length][];
-        for (int i = 0; i < or.length; i++) {
-            groups[i] = or[i].split(",", -1);
-            for (int j = 0; j < groups[i].length; j++) {
-                groups[i][j] = groups[i][j].trim().toLowerCase(Locale.ROOT);
-                if (isBlank(groups[i][j])) return null;
-            }
+        String[] terms = expression.split(AND, -1);
+        for (int i = 0; i < terms.length; i++) {
+            terms[i] = terms[i].trim().toLowerCase(Locale.ROOT);
+            if (isBlank(terms[i])) return null;
         }
-        return groups;
+        return terms;
     }
-    private static boolean isBlank(String value) {
+    static boolean isBlank(String value) {
         // Reject empty conditions without trimming more characters from literal terms.
         for (int i = 0; i < value.length();) {
             int c = value.codePointAt(i);
@@ -46,14 +43,10 @@ final class RuleExpression {
         }
         return true;
     }
-    boolean valid() { return groups != null; }
+    boolean valid() { return terms != null; }
     boolean matchesNormalized(String text) {
-        if (groups == null) return false;
-        for (String[] group : groups) {
-            boolean all = true;
-            for (String term : group) if (!text.contains(term)) { all = false; break; }
-            if (all) return true;
-        }
-        return false;
+        if (terms == null) return false;
+        for (String term : terms) if (!text.contains(term)) return false;
+        return true;
     }
 }

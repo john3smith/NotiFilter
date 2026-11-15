@@ -489,14 +489,14 @@ public final class MainActivity extends Activity {
         }));
         LinearLayout phraseHeader = new LinearLayout(this);
         phraseHeader.setGravity(Gravity.CENTER_VERTICAL);
-        phraseHeader.addView(text(literal ? "포함 문구 · 알림 문구 그대로 비교" : "포함 문구 · , AND / ; OR", 14, MUTED, false),
+        phraseHeader.addView(text(literal ? "포함 문구 · 알림 문구 그대로 비교" : "포함 문구 · ; 로 AND (모두 포함)", 14, MUTED, false),
                 new LinearLayout.LayoutParams(0, -2, 1));
         TextView help = text("?", 19, MUTED, true);
         help.setGravity(Gravity.CENTER);
         help.setMinHeight(dp(44));
         help.setPadding(0, dp(8), 0, dp(8));
         help.setBackground(shape(Color.rgb(235, 239, 245), 22));
-        help.setContentDescription("문구 조건과 AND OR 우선순위 도움말");
+        help.setContentDescription("문구 조건 AND 도움말");
         help.setOnClickListener(v -> {
             if (literal) Toast.makeText(this, "알림에서 만든 규칙은 쉼표·세미콜론·줄바꿈도 문구 그대로 비교합니다. 영문 대소문자는 구분하지 않습니다.", Toast.LENGTH_LONG).show();
             else showRuleHelp();
@@ -508,7 +508,7 @@ public final class MainActivity extends Activity {
         EditText phrase = new EditText(this);
         phrase.setId(R.id.rule_phrase);
         phrase.setSingleLine(!literal);
-        phrase.setHint("예: 택배,배송;배달,완료");
+        phrase.setHint("예: 택배;배송");
         phrase.setTextSize(16);
         if (editing) {
             phrase.setText(original.phrase);
@@ -560,7 +560,7 @@ public final class MainActivity extends Activity {
                 return;
             }
             if (!literal && !RuleMatcher.isValidExpression(value)) {
-                phrase.setError("구분자 앞뒤에 문구를 입력해 주세요. 빈 조건은 사용할 수 없습니다.");
+                phrase.setError("세미콜론(;) 앞뒤에 문구를 입력해 주세요. 빈 조건은 사용할 수 없습니다.");
                 return;
             }
             List<Rule> rules = store.load();
@@ -728,22 +728,18 @@ public final class MainActivity extends Activity {
         AlertDialog help = new AlertDialog.Builder(this)
                 .setTitle("문구 조건 사용법")
                 .setMessage("알림의 제목·본문 등에서 문구 포함 여부를 검사합니다.\n\n"
-                        + "쉼표 , = AND (모두 포함)\n"
-                        + "예: 택배,배송 → ‘택배’와 ‘배송’이 모두 있어야 차단합니다.\n\n"
-                        + "세미콜론 ; = OR (하나 이상 포함)\n"
-                        + "예: 광고;이벤트 → ‘광고’ 또는 ‘이벤트’가 있으면 차단합니다.\n\n"
-                        + "혼합 시 AND가 OR보다 먼저 적용됩니다.\n"
-                        + "예: 택배,배송;배달,완료\n"
-                        + "→ (택배 AND 배송) OR (배달 AND 완료)\n"
-                        + "예: 광고;결제,승인\n"
-                        + "→ 광고 OR (결제 AND 승인)\n"
+                        + "세미콜론 ; = AND (모두 포함)\n"
+                        + "예: 택배;배송 → ‘택배’와 ‘배송’이 모두 있어야 차단합니다.\n"
                         + "단어 순서는 상관없으며 같은 알림 안에 포함되면 됩니다.\n\n"
+                        + "OR(하나만 포함) 조건은 지원하지 않습니다. "
+                        + "여러 문구 중 하나만 있어도 차단하려면 문구마다 규칙을 따로 추가해 주세요.\n\n"
                         + "문구 앞뒤 공백은 무시하고 영문 대소문자는 구분하지 않습니다. "
-                        + "문구 안의 띄어쓰기는 그대로 비교합니다.\n"
-                        + "빈 조건(예: 광고,,이벤트 / 광고;)은 저장할 수 없습니다.\n"
-                        + "반각 , 와 ; 만 구분자입니다. 괄호·정규식·구분자 자체 검색은 지원하지 않습니다.\n"
-                        + "구분자 없는 기존 문구는 이전처럼 포함 검색합니다. "
-                        + "기존 규칙에 , 또는 ;가 있으면 이제 조건 구분자로 해석됩니다.")
+                        + "문구 안의 띄어쓰기와 쉼표(,)는 그대로 비교합니다.\n"
+                        + "빈 조건(예: 광고;;이벤트 / 광고;)은 저장할 수 없습니다.\n"
+                        + "반각 ; 만 구분자입니다. 괄호·정규식·세미콜론 자체 검색은 지원하지 않습니다.\n\n"
+                        + "이전 버전 규칙은 업데이트 시 한 번 자동 변환됩니다. "
+                        + "쉼표(,) AND는 ;로 바뀌고, ; OR로 묶인 조건은 각각 별도 규칙으로 나뉘어 "
+                        + "이전과 같은 알림을 차단합니다.")
                 .setPositiveButton("확인", null).create();
         ruleHelpDialog = help;
         help.setOnDismissListener(ignored -> {

@@ -40,11 +40,12 @@ final class RuleStoreChecks {
 
             List<Rule> expected = new ArrayList<>();
             expected.add(new Rule(1, "com.example.scope", "SYNTHETIC APP", "coupon", true));
-            expected.add(new Rule(2, "", "모든 앱", "sale,done;event", true));
+            expected.add(new Rule(2, "", "모든 앱", "sale;done", true));
             expected.add(new Rule(3, "", "모든 앱", "disabled", false));
+            expected.add(new Rule(4, "", "모든 앱", "event", true));
             ui.save(expected);
             List<Rule> loaded = service.load();
-            if (loaded.size() != 3 || !loaded.get(0).packageName.equals("com.example.scope")
+            if (loaded.size() != 4 || !loaded.get(0).packageName.equals("com.example.scope")
                     || !loaded.get(1).packageName.isEmpty() || loaded.get(2).enabled)
                 throw new AssertionError("Valid scope/toggle round trip");
             if (!RuleMatcher.matches(loaded, "com.example.scope", "COUPON")
@@ -55,12 +56,12 @@ final class RuleStoreChecks {
                     || RuleMatcher.matches(loaded, "com.example.other", "disabled"))
                 throw new AssertionError("Valid matching regression");
             loaded.clear();
-            if (service.load().size() != 3) throw new AssertionError("Cache defensive copy");
+            if (service.load().size() != 4) throw new AssertionError("Cache defensive copy");
             expected.set(0, expected.get(0).withEnabled(false)); ui.save(expected);
             if (RuleMatcher.matches(service.load(), "com.example.scope", "coupon"))
                 throw new AssertionError("Service cache ignored updated UI preferences");
             if (!failures.isEmpty()) throw new AssertionError("Unsafe persisted rules accepted: " + failures);
-            return "PASS rule-store: 13 malformed records rejected without rewriting preferences; valid save/load, scoped/global/disabled and AND/OR matching, cross-instance cache refresh and defensive copies\n";
+            return "PASS rule-store: 13 malformed records rejected without rewriting preferences; valid save/load, scoped/global/disabled and semicolon AND matching, cross-instance cache refresh and defensive copies\n";
         } finally {
             SharedPreferences.Editor restore = prefs.edit();
             if (hadRules) restore.putString("rules", before); else restore.remove("rules");
