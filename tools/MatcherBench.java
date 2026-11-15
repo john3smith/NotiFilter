@@ -5,7 +5,7 @@ public final class MatcherBench {
     public static void main(String[] args) {
         for (int count : new int[]{64, 256, 512}) {
             List<Rule> rules = new ArrayList<>();
-            for (int i=0;i<count;i++) rules.add(new Rule(i,"","","missing"+i+",today;other"+i,true));
+            for (int i=0;i<count;i++) rules.add(new Rule(i,"","","missing"+i+";today;other"+i,true));
             for(int i=0;i<2000;i++) sink += RuleMatcher.matches(rules,"app","ordinary notification")?1:0;
             double[] samples=new double[7];
             for(int s=0;s<samples.length;s++) {
