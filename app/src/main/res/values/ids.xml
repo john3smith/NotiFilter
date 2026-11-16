@@ -17,4 +17,11 @@
     <item name="sort_oldest" type="id" />
     <item name="sort_name" type="id" />
     <item name="rule_card_id" type="id" />
+    <item name="main_background" type="id" />
+    <item name="background_status" type="id" />
+    <item name="background_pick" type="id" />
+    <item name="background_remove" type="id" />
+    <item name="background_mode_fill" type="id" />
+    <item name="background_mode_crop" type="id" />
+    <item name="background_mode_fit" type="id" />
 </resources>

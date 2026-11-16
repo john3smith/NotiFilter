@@ -23,6 +23,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.BaseAdapter;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
@@ -59,6 +60,26 @@ public final class MainActivity extends Activity {
     private TextView pickerStatus;
     private boolean appsLoading=true,appsFailed;
     private final java.util.Set<String> expandedApps = new java.util.HashSet<>();
+    private static final int PICK_BACKGROUND = 41;
+    private final java.util.concurrent.ExecutorService photoWorker =
+            java.util.concurrent.Executors.newSingleThreadExecutor();
+    private ImageView backgroundImage;
+    private View backgroundVeil;
+    private android.graphics.Bitmap backgroundBitmap;
+    private long backgroundBitmapVersion = -1;
+    private long backgroundLoadingVersion = -1;
+    private int backgroundRequest;
+    private boolean destroying;
+    // Edits in the background dialog stay staged until 저장; 취소 leaves everything unchanged.
+    private AlertDialog backgroundDialog;
+    private Runnable backgroundDialogRefresh;
+    private BackgroundPhoto.Mode stagedMode;
+    private boolean stagedRemove;
+    private java.io.File stagedPhoto;
+    private android.net.Uri preparingPhoto;
+    private String photoError;
+    private boolean photoPicking;
+    private int photoRequest;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -68,6 +89,7 @@ public final class MainActivity extends Activity {
         catalog.refresh();
         store = new RuleStore(this);
         render();
+        if (state != null && state.getBoolean("backgroundDialog")) showBackgroundDialog(state);
     }
 
     @Override protected void onResume() {
@@ -78,10 +100,23 @@ public final class MainActivity extends Activity {
 
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putStringArrayList("expandedApps", new ArrayList<>(expandedApps));
+        if (backgroundDialog != null) {
+            state.putBoolean("backgroundDialog", true);
+            state.putString("backgroundMode", stagedMode.key);
+            state.putBoolean("backgroundRemove", stagedRemove);
+            if (stagedPhoto != null) state.putString("backgroundStaged", stagedPhoto.getPath());
+            if (preparingPhoto != null) state.putParcelable("backgroundPreparing", preparingPhoto);
+        }
         super.onSaveInstanceState(state);
     }
 
     @Override protected void onDestroy() {
+        // Keep staged files for a recreated activity; abandoned ones are swept on the next fresh open.
+        destroying = true;
+        photoRequest++;
+        backgroundRequest++;
+        if (backgroundDialog != null) backgroundDialog.dismiss();
+        photoWorker.shutdownNow();
         activeNotificationsRequest++;
         if (activeNotificationsDialog != null) activeNotificationsDialog.dismiss();
         notificationLoader.shutdownNow();
@@ -126,7 +161,6 @@ public final class MainActivity extends Activity {
     private void render() {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
-        scroll.setBackgroundColor(BG);
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(20), dp(28), dp(20), dp(28));
@@ -137,10 +171,20 @@ public final class MainActivity extends Activity {
             return insets;
         });
         scroll.addView(root);
-        setContentView(scroll);
+        // The photo stays fixed behind the scrolling content; a light veil keeps
+        // the uncarded heading and notes readable over any image.
+        FrameLayout screen = new FrameLayout(this);
+        screen.setBackgroundColor(BG);
+        backgroundImage = new ImageView(this);
+        backgroundImage.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        screen.addView(backgroundImage, new FrameLayout.LayoutParams(-1, -1));
+        backgroundVeil = new View(this);
+        backgroundVeil.setBackgroundColor(Color.argb(204, 247, 249, 252));
+        screen.addView(backgroundVeil, new FrameLayout.LayoutParams(-1, -1));
+        screen.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+        setContentView(screen);
+        applyBackground();
 
-        LinearLayout heading = new LinearLayout(this);
-        heading.setGravity(Gravity.TOP);
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
         TextView eyebrow = text("알림을 더 조용하게", 13, BLUE, true);
@@ -149,18 +193,38 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(-1, -2);
         tp.topMargin = dp(5);
         titles.addView(title, tp);
-        heading.addView(titles, new LinearLayout.LayoutParams(0, -2, 1));
-        ImageButton settings = new ImageButton(this);
-        settings.setId(R.id.main_settings);
-        settings.setImageResource(R.drawable.ic_settings);
-        settings.setContentDescription("설정");
-        settings.setPadding(dp(12), dp(12), dp(12), dp(12));
-        settings.setBackground(new RippleDrawable(ColorStateList.valueOf(0x222563EB),
-                shape(Color.rgb(234, 241, 255), 12), null));
+        LinearLayout headerActions = new LinearLayout(this);
+        headerActions.addView(headerIcon(R.id.main_background, R.drawable.ic_photo, "배경 사진",
+                v -> showBackgroundDialog(null)), new LinearLayout.LayoutParams(dp(48), dp(48)));
         LinearLayout.LayoutParams settingsParams = new LinearLayout.LayoutParams(dp(48), dp(48));
-        settingsParams.leftMargin = dp(12);
-        heading.addView(settings, settingsParams);
-        settings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
+        settingsParams.leftMargin = dp(8);
+        headerActions.addView(headerIcon(R.id.main_settings, R.drawable.ic_settings, "설정",
+                v -> startActivity(new Intent(this, SettingsActivity.class))), settingsParams);
+        LinearLayout heading = new LinearLayout(this) {
+            @Override protected void onMeasure(int widthSpec, int heightSpec) {
+                // Narrow or large-font screens move the icons to their own row instead of
+                // squeezing the title into a column beside them.
+                int available = MeasureSpec.getSize(widthSpec) - getPaddingLeft() - getPaddingRight();
+                headerActions.measure(MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
+                        MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+                int titleWidth = (int) Math.ceil(Math.max(
+                        android.text.Layout.getDesiredWidth(title.getText(), title.getPaint()),
+                        android.text.Layout.getDesiredWidth(eyebrow.getText(), eyebrow.getPaint())));
+                boolean stacked = MeasureSpec.getMode(widthSpec) != MeasureSpec.UNSPECIFIED
+                        && titleWidth + dp(12) + headerActions.getMeasuredWidth() > available;
+                setOrientation(stacked ? VERTICAL : HORIZONTAL);
+                LayoutParams titleParams = (LayoutParams) titles.getLayoutParams();
+                titleParams.width = stacked ? LayoutParams.MATCH_PARENT : 0;
+                titleParams.weight = stacked ? 0 : 1;
+                LayoutParams actionParams = (LayoutParams) headerActions.getLayoutParams();
+                actionParams.gravity = stacked ? Gravity.END : Gravity.TOP;
+                actionParams.leftMargin = stacked ? 0 : dp(12);
+                actionParams.topMargin = stacked ? dp(10) : 0;
+                super.onMeasure(widthSpec, heightSpec);
+            }
+        };
+        heading.addView(titles, new LinearLayout.LayoutParams(0, -2, 1));
+        heading.addView(headerActions, new LinearLayout.LayoutParams(-2, -2));
         root.addView(heading);
         TextView subtitle = text("원하는 앱과 문구를 선택하면 일치하는 알림을 자동으로 숨깁니다.", 14, MUTED, false);
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, -2);
@@ -316,6 +380,274 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
         fp.topMargin = dp(8);
         root.addView(foot, fp);
+    }
+
+    private void applyBackground() {
+        backgroundImage.setScaleType(BackgroundPhoto.mode(this).scaleType);
+        if (!BackgroundPhoto.hasPhoto(this)) {
+            backgroundBitmap = null;
+            backgroundBitmapVersion = -1;
+            showBackgroundBitmap();
+            return;
+        }
+        long version = BackgroundPhoto.version(this);
+        // Until a changed photo finishes decoding, keep showing the previous one.
+        showBackgroundBitmap();
+        if (backgroundBitmapVersion == version || backgroundLoadingVersion == version) return;
+        backgroundLoadingVersion = version;
+        final int request = ++backgroundRequest;
+        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+        int width = metrics.widthPixels, height = metrics.heightPixels;
+        android.content.Context app = getApplicationContext();
+        try {
+            photoWorker.execute(() -> {
+                android.graphics.Bitmap bitmap = BackgroundPhoto.loadForDisplay(app, width, height);
+                runOnUiThread(() -> {
+                    if (isDestroyed() || request != backgroundRequest) return;
+                    backgroundLoadingVersion = -1;
+                    if (BackgroundPhoto.version(this) != version) {
+                        applyBackground();
+                        return;
+                    }
+                    backgroundBitmap = bitmap;
+                    backgroundBitmapVersion = version;
+                    if (bitmap == null)
+                        Toast.makeText(this, "배경 사진을 읽지 못해 기본 배경을 표시합니다.", Toast.LENGTH_LONG).show();
+                    showBackgroundBitmap();
+                });
+            });
+        } catch (java.util.concurrent.RejectedExecutionException stopped) {
+            backgroundLoadingVersion = -1;
+        }
+    }
+
+    private void showBackgroundBitmap() {
+        backgroundImage.setImageBitmap(backgroundBitmap);
+        int visibility = backgroundBitmap != null ? View.VISIBLE : View.GONE;
+        backgroundImage.setVisibility(visibility);
+        backgroundVeil.setVisibility(visibility);
+    }
+
+    private void showBackgroundDialog(Bundle restored) {
+        if (backgroundDialog != null || isFinishing() || isDestroyed()) return;
+        if (restored == null) {
+            // No dialog references staged copies now, so leftovers are safe to remove.
+            BackgroundPhoto.clearStaging(this);
+            stagedMode = BackgroundPhoto.mode(this);
+            stagedRemove = false;
+            stagedPhoto = null;
+            preparingPhoto = null;
+        } else {
+            stagedMode = BackgroundPhoto.Mode.fromKey(restored.getString("backgroundMode", ""));
+            stagedRemove = restored.getBoolean("backgroundRemove");
+            String path = restored.getString("backgroundStaged");
+            java.io.File staged = path == null ? null : new java.io.File(path);
+            stagedPhoto = BackgroundPhoto.isStaged(this, staged) ? staged : null;
+            preparingPhoto = restored.getParcelable("backgroundPreparing");
+        }
+        photoError = null;
+        photoPicking = false;
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(22), dp(12), dp(22), dp(12));
+        TextView status = text("", 14, MUTED, false);
+        status.setId(R.id.background_status);
+        status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        content.addView(status, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout actions = new AdaptiveRow(this, true);
+        Button pick = button("사진 선택", true);
+        pick.setId(R.id.background_pick);
+        actions.addView(pick, new LinearLayout.LayoutParams(0, -2, 1));
+        Button remove = button("사진 삭제", false);
+        remove.setId(R.id.background_remove);
+        remove.setTextColor(Color.rgb(193, 60, 60));
+        actions.addView(remove, new LinearLayout.LayoutParams(0, -2, 1));
+        LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(-1, -2);
+        actionsParams.topMargin = dp(12);
+        content.addView(actions, actionsParams);
+        TextView modeLabel = text("표시 방식", 14, MUTED, true);
+        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(-1, -2);
+        labelParams.topMargin = dp(18);
+        content.addView(modeLabel, labelParams);
+        android.widget.RadioGroup modes = new android.widget.RadioGroup(this);
+        int[] modeIds = {R.id.background_mode_fill, R.id.background_mode_crop, R.id.background_mode_fit};
+        List<android.widget.RadioButton> modeButtons = new ArrayList<>();
+        for (BackgroundPhoto.Mode mode : BackgroundPhoto.Mode.values()) {
+            android.widget.RadioButton option = new android.widget.RadioButton(this);
+            option.setId(modeIds[mode.ordinal()]);
+            option.setText(mode.label);
+            option.setTextSize(16);
+            option.setTextColor(INK);
+            option.setMinHeight(dp(48));
+            option.setMinimumHeight(dp(48));
+            option.setButtonTintList(ColorStateList.valueOf(BLUE));
+            option.setChecked(mode == stagedMode);
+            option.setOnCheckedChangeListener((view, checked) -> { if (checked) stagedMode = mode; });
+            modes.addView(option, new android.widget.RadioGroup.LayoutParams(-1, -2));
+            modeButtons.add(option);
+        }
+        LinearLayout.LayoutParams modesParams = new LinearLayout.LayoutParams(-1, -2);
+        modesParams.topMargin = dp(4);
+        content.addView(modes, modesParams);
+        ScrollView formScroll = new ScrollView(this);
+        formScroll.addView(content);
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("배경 사진")
+                .setView(formScroll).setNegativeButton("취소", null)
+                .setPositiveButton("저장", null).create();
+        backgroundDialog = dialog;
+        Runnable refresh = () -> {
+            if (backgroundDialog != dialog) return;
+            boolean current = BackgroundPhoto.hasPhoto(this);
+            boolean photo = stagedPhoto != null || (current && !stagedRemove);
+            boolean busy = photoPicking || preparingPhoto != null;
+            status.setText(photoError != null ? photoError
+                    : preparingPhoto != null ? "사진을 준비하는 중입니다…"
+                    : photoPicking ? "사진을 선택해 주세요."
+                    : stagedPhoto != null ? "새 사진이 준비되었습니다. 저장을 누르면 적용됩니다."
+                    : stagedRemove && current ? "저장하면 사진을 삭제하고 기본 배경으로 되돌립니다."
+                    : current ? "현재 배경 사진을 사용 중입니다."
+                    : "배경 사진이 없습니다. 기본 배경을 사용 중입니다.");
+            status.setTextColor(photoError != null ? Color.rgb(193, 60, 60) : MUTED);
+            pick.setText(photo ? "사진 변경" : "사진 선택");
+            pick.setEnabled(!busy);
+            remove.setEnabled(!busy && photo);
+            remove.setAlpha(remove.isEnabled() ? 1f : 0.5f);
+            for (android.widget.RadioButton option : modeButtons) option.setEnabled(photo && !busy);
+            Button save = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            if (save != null) save.setEnabled(!busy);
+        };
+        backgroundDialogRefresh = refresh;
+        pick.setOnClickListener(v -> {
+            if (backgroundDialog != dialog || photoPicking || preparingPhoto != null) return;
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT)
+                    .addCategory(Intent.CATEGORY_OPENABLE).setType("image/*");
+            photoError = null;
+            try {
+                startActivityForResult(intent, PICK_BACKGROUND);
+                photoPicking = true;
+            } catch (android.content.ActivityNotFoundException missing) {
+                photoError = "사진을 선택할 수 있는 앱이 없습니다.";
+            }
+            refresh.run();
+        });
+        remove.setOnClickListener(v -> {
+            if (backgroundDialog != dialog || photoPicking || preparingPhoto != null) return;
+            if (stagedPhoto != null) {
+                //noinspection ResultOfMethodCallIgnored
+                stagedPhoto.delete();
+                stagedPhoto = null;
+            }
+            stagedRemove = true;
+            photoError = null;
+            refresh.run();
+        });
+        dialog.setCanceledOnTouchOutside(false);
+        dialog.setOnDismissListener(ignored -> {
+            if (backgroundDialog != dialog) return;
+            backgroundDialog = null;
+            backgroundDialogRefresh = null;
+            photoRequest++;
+            // An activity being recreated restores and keeps using the staged copy.
+            if (!destroying && stagedPhoto != null) //noinspection ResultOfMethodCallIgnored
+                stagedPhoto.delete();
+            stagedPhoto = null;
+            preparingPhoto = null;
+            photoPicking = false;
+            photoError = null;
+        });
+        dialog.setOnShowListener(ignored -> {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> saveBackground(dialog));
+            refresh.run();
+        });
+        dialog.show();
+        if (preparingPhoto != null) startPhotoPrepare(preparingPhoto);
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != PICK_BACKGROUND) return;
+        photoPicking = false;
+        if (backgroundDialog == null) return;
+        android.net.Uri picked = resultCode == RESULT_OK && data != null ? data.getData() : null;
+        if (picked != null) startPhotoPrepare(picked);
+        else if (backgroundDialogRefresh != null) backgroundDialogRefresh.run();
+    }
+
+    private void startPhotoPrepare(android.net.Uri uri) {
+        final int request = ++photoRequest;
+        preparingPhoto = uri;
+        photoError = null;
+        if (backgroundDialogRefresh != null) backgroundDialogRefresh.run();
+        android.content.Context app = getApplicationContext();
+        Runnable task = () -> {
+            java.io.File prepared = null;
+            String error = null;
+            try {
+                prepared = BackgroundPhoto.prepare(app, uri);
+            } catch (BackgroundPhoto.PhotoException failed) {
+                error = failed.getMessage();
+            } catch (java.io.IOException | RuntimeException failed) {
+                error = "사진을 준비하지 못했습니다. 다시 선택해 주세요.";
+            }
+            final java.io.File result = prepared;
+            final String message = error;
+            runOnUiThread(() -> {
+                // Results for a closed dialog, a newer pick or a destroyed activity are discarded.
+                if (isDestroyed() || request != photoRequest || backgroundDialog == null) {
+                    if (result != null) //noinspection ResultOfMethodCallIgnored
+                        result.delete();
+                    return;
+                }
+                preparingPhoto = null;
+                if (result != null) {
+                    if (stagedPhoto != null) //noinspection ResultOfMethodCallIgnored
+                        stagedPhoto.delete();
+                    stagedPhoto = result;
+                    stagedRemove = false;
+                } else {
+                    photoError = message;
+                }
+                if (backgroundDialogRefresh != null) backgroundDialogRefresh.run();
+            });
+        };
+        try {
+            photoWorker.execute(task);
+        } catch (java.util.concurrent.RejectedExecutionException stopped) {
+            preparingPhoto = null;
+        }
+    }
+
+    private void saveBackground(AlertDialog dialog) {
+        if (backgroundDialog != dialog || !dialog.isShowing() || photoPicking || preparingPhoto != null) return;
+        boolean replaced = stagedPhoto != null;
+        boolean removed = !replaced && stagedRemove && BackgroundPhoto.hasPhoto(this);
+        if (!BackgroundPhoto.commit(this, stagedPhoto, stagedRemove, stagedMode)) {
+            photoError = "배경을 저장하지 못했습니다. 이전 배경을 유지합니다.";
+            if (backgroundDialogRefresh != null) backgroundDialogRefresh.run();
+            return;
+        }
+        stagedPhoto = null; // Now the committed photo, not a staged copy.
+        dialog.dismiss();
+        Toast.makeText(this, replaced ? "배경 사진을 적용했습니다" : removed ? "기본 배경으로 되돌렸습니다"
+                : "배경 설정을 저장했습니다", Toast.LENGTH_SHORT).show();
+        ScrollView scroll = (ScrollView) root.getParent();
+        int position = scroll.getScrollY();
+        render();
+        ScrollView next = (ScrollView) root.getParent();
+        next.post(() -> next.scrollTo(0, position));
+    }
+
+    private ImageButton headerIcon(int id, int icon, String description, View.OnClickListener onClick) {
+        ImageButton action = new ImageButton(this);
+        action.setId(id);
+        action.setImageResource(icon);
+        action.setContentDescription(description);
+        action.setPadding(dp(12), dp(12), dp(12), dp(12));
+        action.setBackground(new RippleDrawable(ColorStateList.valueOf(0x222563EB),
+                shape(Color.rgb(234, 241, 255), 12), null));
+        action.setOnClickListener(onClick);
+        return action;
     }
 
     private Button button(String label, boolean primary) {
