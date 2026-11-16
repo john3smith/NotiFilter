@@ -139,8 +139,72 @@ public final class MainActivity extends Activity {
         return d;
     }
 
+    /**
+     * Draws a thin solid outline of contrasting color behind the glyphs, then lets the
+     * platform draw the original text on top. Unlike a shadow layer there is no blur.
+     * Only the text layout is stroked, so backgrounds and compound drawables draw once.
+     */
+    static final class TextHalo {
+        private TextHalo() {}
+
+        static void drawOutline(TextView view, android.graphics.Canvas canvas) {
+            android.text.Layout layout = view.getLayout();
+            if (layout == null || TextUtils.isEmpty(view.getText())) return;
+            int color = view.getCurrentTextColor();
+            float luminance = (0.299f * Color.red(color) + 0.587f * Color.green(color) + 0.114f * Color.blue(color)) / 255f;
+            int alpha = Color.alpha(color);
+            int halo = luminance > 0.6f ? Color.argb(alpha * 200 / 255, 0, 0, 0)
+                    : Color.argb(alpha * 235 / 255, 255, 255, 255);
+            android.text.TextPaint paint = view.getPaint();
+            android.graphics.Paint.Style style = paint.getStyle();
+            float width = paint.getStrokeWidth();
+            android.graphics.Paint.Join join = paint.getStrokeJoin();
+            android.graphics.Paint.Cap cap = paint.getStrokeCap();
+            int saved = canvas.save();
+            try {
+                paint.setStyle(android.graphics.Paint.Style.STROKE);
+                // The stroke is centered on the glyph edge; the fill drawn later covers the inner half.
+                paint.setStrokeWidth(2 * view.getResources().getDisplayMetrics().density);
+                paint.setStrokeJoin(android.graphics.Paint.Join.ROUND);
+                paint.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+                paint.setColor(halo);
+                canvas.translate(view.getTotalPaddingLeft(), view.getTotalPaddingTop());
+                layout.draw(canvas);
+            } finally {
+                canvas.restoreToCount(saved);
+                paint.setStyle(style);
+                paint.setStrokeWidth(width);
+                paint.setStrokeJoin(join);
+                paint.setStrokeCap(cap);
+                paint.setColor(color);
+            }
+        }
+    }
+
+    static final class HaloTextView extends TextView {
+        private boolean halo;
+        public HaloTextView(android.content.Context context) { super(context); }
+        public HaloTextView(android.content.Context context, android.util.AttributeSet attrs) { super(context, attrs); }
+        void setHalo(boolean enabled) { if (halo != enabled) { halo = enabled; invalidate(); } }
+        @Override protected void onDraw(android.graphics.Canvas canvas) {
+            if (halo) TextHalo.drawOutline(this, canvas);
+            super.onDraw(canvas);
+        }
+    }
+
+    static final class HaloButton extends Button {
+        private boolean halo;
+        public HaloButton(android.content.Context context) { super(context); }
+        public HaloButton(android.content.Context context, android.util.AttributeSet attrs) { super(context, attrs); }
+        void setHalo(boolean enabled) { if (halo != enabled) { halo = enabled; invalidate(); } }
+        @Override protected void onDraw(android.graphics.Canvas canvas) {
+            if (halo) TextHalo.drawOutline(this, canvas);
+            super.onDraw(canvas);
+        }
+    }
+
     private TextView text(String value, int size, int color, boolean bold) {
-        TextView t = new TextView(this);
+        TextView t = new HaloTextView(this);
         t.setText(value);
         t.setTextSize(size);
         t.setTextColor(color);
@@ -439,17 +503,15 @@ public final class MainActivity extends Activity {
     }
 
     /**
-     * Gives each text its own halo over a photo instead of veiling the whole image:
-     * dark text gets a light glow, light text a dark one. Opaque frames hide it.
-     * The 1dp radius only outlines the glyph edges so text stays crisp without a bloom.
+     * Gives each text its own outline over a photo instead of veiling the whole image:
+     * dark text gets a thin light outline, light text a dark one, with no blur.
+     * The halo color follows the current text color, so checked/disabled states keep working.
      */
     private void addTextHalos(View view) {
-        if (view instanceof TextView) {
-            TextView label = (TextView) view;
-            int color = label.getCurrentTextColor();
-            float luminance = (0.299f * Color.red(color) + 0.587f * Color.green(color) + 0.114f * Color.blue(color)) / 255f;
-            float radius = getResources().getDisplayMetrics().density;
-            label.setShadowLayer(radius, 0, 0, luminance > 0.6f ? Color.argb(150, 0, 0, 0) : Color.argb(200, 248, 248, 248));
+        if (view instanceof HaloTextView) {
+            ((HaloTextView) view).setHalo(true);
+        } else if (view instanceof HaloButton) {
+            ((HaloButton) view).setHalo(true);
         } else if (view instanceof android.view.ViewGroup) {
             android.view.ViewGroup group = (android.view.ViewGroup) view;
             for (int i = 0; i < group.getChildCount(); i++) addTextHalos(group.getChildAt(i));
@@ -686,7 +748,7 @@ public final class MainActivity extends Activity {
     }
 
     private Button button(String label, boolean primary) {
-        Button b = new Button(this);
+        Button b = new HaloButton(this);
         b.setAllCaps(false);
         b.setText(label);
         b.setTextSize(14);
