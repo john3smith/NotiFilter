@@ -24,4 +24,6 @@
     <item name="background_mode_fill" type="id" />
     <item name="background_mode_crop" type="id" />
     <item name="background_mode_fit" type="id" />
+    <item name="settings_frame_transparency" type="id" />
+    <item name="settings_button_transparency" type="id" />
 </resources>

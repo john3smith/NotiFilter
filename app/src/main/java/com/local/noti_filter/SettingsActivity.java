@@ -15,6 +15,7 @@ import android.view.Gravity;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -91,11 +92,45 @@ public final class SettingsActivity extends Activity {
         LinearLayout.LayoutParams permissionParams = new LinearLayout.LayoutParams(-1, -2); permissionParams.topMargin = dp(14);
         access.addView(permission, permissionParams); permission.setOnClickListener(view -> showAccessDisclosure());
 
+        LinearLayout look = card(); look.addView(text("배경 투명도", 17, INK, true));
+        TextView lookInfo = text("메인 화면의 틀과 버튼 배경색만 투명해집니다. 글자와 아이콘은 그대로 표시됩니다.", 13, MUTED, false);
+        LinearLayout.LayoutParams lookParams = new LinearLayout.LayoutParams(-1, -2); lookParams.topMargin = dp(8); look.addView(lookInfo, lookParams);
+        transparencyControl(look, R.id.settings_frame_transparency, "틀 투명도",
+                BackgroundPhoto.frameTransparency(this), value -> BackgroundPhoto.setFrameTransparency(this, value));
+        transparencyControl(look, R.id.settings_button_transparency, "버튼 배경 투명도",
+                BackgroundPhoto.buttonTransparency(this), value -> BackgroundPhoto.setButtonTransparency(this, value));
+
         LinearLayout privacy = card(); privacy.addView(text("개인정보와 권한", 17, INK, true));
         Button policy = button("개인정보·권한 안내"); policy.setId(R.id.settings_privacy);
         LinearLayout.LayoutParams policyParams = new LinearLayout.LayoutParams(-1, -2); policyParams.topMargin = dp(12);
         privacy.addView(policy, policyParams);
         policy.setOnClickListener(view -> StoreInfo.show(this, this::showSettingsDialog));
+    }
+    /** Labeled 0-100 % slider; each change is saved and the main screen reads it on return. */
+    private void transparencyControl(LinearLayout parent, int id, String label, int value,
+                                     java.util.function.IntConsumer save) {
+        TextView title = text("", 15, INK, true);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2); titleParams.topMargin = dp(16);
+        parent.addView(title, titleParams);
+        SeekBar slider = new SeekBar(this); slider.setId(id); slider.setMax(100); slider.setProgress(value);
+        // ProgressBar sizes from its drawables plus padding, so padding keeps the 48dp target.
+        slider.setMinimumHeight(dp(48)); slider.setPadding(dp(16), dp(14), dp(16), dp(14));
+        slider.setProgressTintList(ColorStateList.valueOf(BLUE)); slider.setThumbTintList(ColorStateList.valueOf(BLUE));
+        Runnable describe = () -> {
+            int current = slider.getProgress();
+            title.setText(label + ": " + current + "%");
+            slider.setContentDescription(label + " " + current + "퍼센트");
+        };
+        describe.run();
+        slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                describe.run();
+                if (fromUser) save.accept(progress);
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) { }
+            @Override public void onStopTrackingTouch(SeekBar bar) { }
+        });
+        parent.addView(slider, new LinearLayout.LayoutParams(-1, -2));
     }
     private boolean hasAccess() {
         String listeners = Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
