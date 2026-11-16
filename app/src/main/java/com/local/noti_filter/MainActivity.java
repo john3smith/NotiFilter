@@ -441,13 +441,15 @@ public final class MainActivity extends Activity {
     /**
      * Gives each text its own halo over a photo instead of veiling the whole image:
      * dark text gets a light glow, light text a dark one. Opaque frames hide it.
+     * The 1dp radius only outlines the glyph edges so text stays crisp without a bloom.
      */
     private void addTextHalos(View view) {
         if (view instanceof TextView) {
             TextView label = (TextView) view;
             int color = label.getCurrentTextColor();
             float luminance = (0.299f * Color.red(color) + 0.587f * Color.green(color) + 0.114f * Color.blue(color)) / 255f;
-            label.setShadowLayer(dp(3), 0, 0, luminance > 0.6f ? Color.argb(170, 0, 0, 0) : Color.argb(235, 255, 255, 255));
+            float radius = getResources().getDisplayMetrics().density;
+            label.setShadowLayer(radius, 0, 0, luminance > 0.6f ? Color.argb(150, 0, 0, 0) : Color.argb(200, 248, 248, 248));
         } else if (view instanceof android.view.ViewGroup) {
             android.view.ViewGroup group = (android.view.ViewGroup) view;
             for (int i = 0; i < group.getChildCount(); i++) addTextHalos(group.getChildAt(i));
