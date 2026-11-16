@@ -64,7 +64,9 @@ public final class MainActivity extends Activity {
     private final java.util.concurrent.ExecutorService photoWorker =
             java.util.concurrent.Executors.newSingleThreadExecutor();
     private ImageView backgroundImage;
-    private View backgroundVeil;
+    // Read on every render so values changed in Settings apply on return.
+    private int frameTransparency = BackgroundPhoto.DEFAULT_FRAME_TRANSPARENCY;
+    private int buttonTransparency = BackgroundPhoto.DEFAULT_BUTTON_TRANSPARENCY;
     private android.graphics.Bitmap backgroundBitmap;
     private long backgroundBitmapVersion = -1;
     private long backgroundLoadingVersion = -1;
@@ -146,12 +148,21 @@ public final class MainActivity extends Activity {
         return t;
     }
 
+    private int frameColor(int color) { return BackgroundPhoto.withTransparency(color, frameTransparency); }
+    private int buttonColor(int color) { return BackgroundPhoto.withTransparency(color, buttonTransparency); }
+
+    /** Translucent background with an opaque ripple mask so feedback stays visible at any alpha. */
+    private RippleDrawable pressable(int ripple, int color, int radius) {
+        return new RippleDrawable(ColorStateList.valueOf(ripple), shape(color, radius), shape(Color.WHITE, radius));
+    }
+
     private LinearLayout card() {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(18), dp(18), dp(18), dp(18));
-        box.setBackground(shape(Color.WHITE, 20));
-        box.setElevation(dp(2));
+        box.setBackground(shape(frameColor(Color.WHITE), 20));
+        // An elevation shadow would show through a translucent frame as a dark tint.
+        box.setElevation(frameTransparency == 0 ? dp(2) : 0);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
         p.bottomMargin = dp(14);
         root.addView(box, p);
@@ -159,6 +170,8 @@ public final class MainActivity extends Activity {
     }
 
     private void render() {
+        frameTransparency = BackgroundPhoto.frameTransparency(this);
+        buttonTransparency = BackgroundPhoto.buttonTransparency(this);
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         root = new LinearLayout(this);
@@ -171,16 +184,13 @@ public final class MainActivity extends Activity {
             return insets;
         });
         scroll.addView(root);
-        // The photo stays fixed behind the scrolling content; a light veil keeps
-        // the uncarded heading and notes readable over any image.
+        // The photo stays fixed behind the scrolling content in its original colors;
+        // only frame and button colors are translucent, and loose text gets its own halo.
         FrameLayout screen = new FrameLayout(this);
         screen.setBackgroundColor(BG);
         backgroundImage = new ImageView(this);
         backgroundImage.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         screen.addView(backgroundImage, new FrameLayout.LayoutParams(-1, -1));
-        backgroundVeil = new View(this);
-        backgroundVeil.setBackgroundColor(Color.argb(204, 247, 249, 252));
-        screen.addView(backgroundVeil, new FrameLayout.LayoutParams(-1, -1));
         screen.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
         setContentView(screen);
         applyBackground();
@@ -253,7 +263,7 @@ public final class MainActivity extends Activity {
             store.setPaused(checked);
             if (!checked) showScanResult(FilterService.clearExistingForEnabledRules());
         });
-        Button history = button("알림 처리 이력", false);
+        Button history = screenButton("알림 처리 이력", false);
         LinearLayout.LayoutParams historyParams = new LinearLayout.LayoutParams(-1, -2);
         historyParams.topMargin = dp(12);
         control.addView(history, historyParams);
@@ -262,11 +272,11 @@ public final class MainActivity extends Activity {
         root.addView(header);
         LinearLayout ruleHeader = new LinearLayout(this);
         ruleHeader.setGravity(Gravity.CENTER_VERTICAL);
-        Button add = button("+ 규칙 추가", true);
+        Button add = screenButton("+ 규칙 추가", true);
         addRuleButton = add;
         add.setEnabled(addRuleDialog == null && activeNotificationsDialog == null);
         ruleHeader.addView(add, new LinearLayout.LayoutParams(0, -2, 1));
-        Button active = button("현재 알림에서 규칙 추가", false);
+        Button active = screenButton("현재 알림에서 규칙 추가", false);
         active.setId(R.id.active_notifications);
         activeNotificationsButton = active;
         active.setEnabled(activeNotificationsDialog == null && addRuleDialog == null);
@@ -283,7 +293,7 @@ public final class MainActivity extends Activity {
         LinearLayout sortPanel = new LinearLayout(this);
         sortPanel.setOrientation(LinearLayout.VERTICAL);
         sortPanel.setPadding(dp(12), dp(10), dp(12), dp(6));
-        sortPanel.setBackground(shape(Color.rgb(239, 242, 246), 12));
+        sortPanel.setBackground(shape(frameColor(Color.rgb(239, 242, 246)), 12));
         sortPanel.addView(text("목록 정렬", 12, MUTED, true));
         RuleOrder.Mode selectedOrder=store.sortOrder();
         int[] sortIds={R.id.sort_newest,R.id.sort_oldest,R.id.sort_name};
@@ -292,8 +302,8 @@ public final class MainActivity extends Activity {
             choice.setTextSize(13);
             choice.setPadding(dp(8), dp(4), dp(8), dp(4));
             choice.setTextColor(mode==selectedOrder ? Color.WHITE : MUTED);
-            choice.setBackground(new RippleDrawable(ColorStateList.valueOf(0x22334455),
-                    shape(mode==selectedOrder ? INK : Color.TRANSPARENT, 8), null));
+            choice.setBackground(pressable(0x22334455,
+                    mode==selectedOrder ? buttonColor(INK) : Color.TRANSPARENT, 8));
             choice.setId(sortIds[mode.ordinal()]);
             choice.setSelected(mode==selectedOrder);
             choice.setContentDescription(mode.label + (mode==selectedOrder ? " 선택됨" : " 정렬"));
@@ -337,7 +347,7 @@ public final class MainActivity extends Activity {
                 LinearLayout groupHeader = new LinearLayout(this);
                 groupHeader.setGravity(Gravity.CENTER_VERTICAL);
                 groupHeader.setPadding(dp(12), dp(8), dp(8), dp(8));
-                groupHeader.setBackground(shape(Color.rgb(225, 235, 252), 12));
+                groupHeader.setBackground(shape(frameColor(Color.rgb(225, 235, 252)), 12));
                 android.widget.ImageView icon = new android.widget.ImageView(this);
                 android.graphics.drawable.Drawable appIcon = getPackageManager().getDefaultActivityIcon();
                 if (!key.isEmpty()) {
@@ -353,7 +363,7 @@ public final class MainActivity extends Activity {
                 groupTitle.addView(text(name, 16, INK, true));
                 groupTitle.addView(text("규칙 " + members.size() + "개", 12, MUTED, false));
                 groupHeader.addView(groupTitle, new LinearLayout.LayoutParams(0, -2, 1));
-                Button toggle = button("", false);
+                Button toggle = screenButton("", false);
                 toggle.setTextSize(12);
                 toggle.setPadding(dp(8), dp(4), dp(8), dp(4));
                 groupHeader.addView(toggle, new LinearLayout.LayoutParams(-2, -2));
@@ -380,6 +390,7 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
         fp.topMargin = dp(8);
         root.addView(foot, fp);
+        if (BackgroundPhoto.hasPhoto(this)) addTextHalos(root);
     }
 
     private void applyBackground() {
@@ -425,7 +436,22 @@ public final class MainActivity extends Activity {
         backgroundImage.setImageBitmap(backgroundBitmap);
         int visibility = backgroundBitmap != null ? View.VISIBLE : View.GONE;
         backgroundImage.setVisibility(visibility);
-        backgroundVeil.setVisibility(visibility);
+    }
+
+    /**
+     * Gives each text its own halo over a photo instead of veiling the whole image:
+     * dark text gets a light glow, light text a dark one. Opaque frames hide it.
+     */
+    private void addTextHalos(View view) {
+        if (view instanceof TextView) {
+            TextView label = (TextView) view;
+            int color = label.getCurrentTextColor();
+            float luminance = (0.299f * Color.red(color) + 0.587f * Color.green(color) + 0.114f * Color.blue(color)) / 255f;
+            label.setShadowLayer(dp(3), 0, 0, luminance > 0.6f ? Color.argb(170, 0, 0, 0) : Color.argb(235, 255, 255, 255));
+        } else if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) addTextHalos(group.getChildAt(i));
+        }
     }
 
     private void showBackgroundDialog(Bundle restored) {
@@ -644,10 +670,17 @@ public final class MainActivity extends Activity {
         action.setImageResource(icon);
         action.setContentDescription(description);
         action.setPadding(dp(12), dp(12), dp(12), dp(12));
-        action.setBackground(new RippleDrawable(ColorStateList.valueOf(0x222563EB),
-                shape(Color.rgb(234, 241, 255), 12), null));
+        action.setBackground(pressable(0x222563EB, buttonColor(Color.rgb(234, 241, 255)), 12));
         action.setOnClickListener(onClick);
         return action;
+    }
+
+    /** Main-screen button whose background color follows the button transparency setting. */
+    private Button screenButton(String label, boolean primary) {
+        Button b = button(label, primary);
+        b.setBackground(pressable(primary ? 0x33FFFFFF : 0x222563EB,
+                buttonColor(primary ? BLUE : Color.rgb(234, 241, 255)), 12));
+        return b;
     }
 
     private Button button(String label, boolean primary) {
@@ -700,7 +733,8 @@ public final class MainActivity extends Activity {
         root.removeView(box);
         parent.addView(box);
         box.setElevation(0);
-        box.setBackground(shape(Color.rgb(247, 249, 252), 10));
+        // Rows sit directly on the group frame; only the frame itself carries a color.
+        box.setBackground(null);
         box.setPadding(dp(12), dp(12), dp(12), dp(12));
         box.setTag(R.id.rule_card_id,rule.id);
         Runnable editRule = () -> {
@@ -720,8 +754,7 @@ public final class MainActivity extends Activity {
         names.setMinimumHeight(dp(56));
         names.setPadding(dp(4), dp(4), dp(4), dp(4));
         names.setGravity(Gravity.CENTER_VERTICAL);
-        names.setBackground(new RippleDrawable(ColorStateList.valueOf(0x222563EB),
-                shape(Color.TRANSPARENT, 8), null));
+        names.setBackground(pressable(0x222563EB, Color.TRANSPARENT, 8));
         names.setFocusable(true);
         names.setContentDescription("규칙 수정: " + rule.appName + " " + rule.phrase);
         names.setOnClickListener(v -> editRule.run());
@@ -753,8 +786,8 @@ public final class MainActivity extends Activity {
         for (Button action : new Button[]{edit, delete}) {
             action.setTextSize(12);
             action.setPadding(dp(12), 0, dp(12), 0);
-            action.setBackground(new RippleDrawable(ColorStateList.valueOf(0x222563EB),
-                    shape(Color.TRANSPARENT, 8), null));
+            // Rows have no backing of their own, so the actions carry the button color.
+            action.setBackground(pressable(0x222563EB, buttonColor(Color.rgb(234, 241, 255)), 8));
         }
         actions.addView(edit,new LinearLayout.LayoutParams(-2,-2));
         LinearLayout.LayoutParams deleteParams=new LinearLayout.LayoutParams(-2,-2);

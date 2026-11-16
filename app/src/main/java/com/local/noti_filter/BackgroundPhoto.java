@@ -65,6 +65,33 @@ final class BackgroundPhoto {
     /** Changes on every committed edit so display caches can tell images apart. */
     static long version(Context context) { return prefs(context).getLong(KEY_VERSION, 0); }
 
+    static final int DEFAULT_FRAME_TRANSPARENCY = 25;
+    static final int DEFAULT_BUTTON_TRANSPARENCY = 15;
+    private static final String KEY_FRAME_TRANSPARENCY = "frame_transparency";
+    private static final String KEY_BUTTON_TRANSPARENCY = "button_transparency";
+
+    private static int percent(int value) { return Math.max(0, Math.min(100, value)); }
+    /** Transparency (0-100 %) of card, group and sort-panel background colors. */
+    static int frameTransparency(Context context) {
+        return percent(prefs(context).getInt(KEY_FRAME_TRANSPARENCY, DEFAULT_FRAME_TRANSPARENCY));
+    }
+    /** Transparency (0-100 %) of main-screen button and icon background colors. */
+    static int buttonTransparency(Context context) {
+        return percent(prefs(context).getInt(KEY_BUTTON_TRANSPARENCY, DEFAULT_BUTTON_TRANSPARENCY));
+    }
+    static void setFrameTransparency(Context context, int value) {
+        prefs(context).edit().putInt(KEY_FRAME_TRANSPARENCY, percent(value)).apply();
+    }
+    static void setButtonTransparency(Context context, int value) {
+        prefs(context).edit().putInt(KEY_BUTTON_TRANSPARENCY, percent(value)).apply();
+    }
+
+    /** Scales only the color's alpha channel; callers never fade whole views or their text. */
+    static int withTransparency(int color, int transparency) {
+        int alpha = Math.round(android.graphics.Color.alpha(color) * (100 - percent(transparency)) / 100f);
+        return (color & 0x00FFFFFF) | (alpha << 24);
+    }
+
     /** Removes abandoned staged copies; call only when no dialog may still reference one. */
     static void clearStaging(Context context) {
         File[] files = stagingDirectory(context).listFiles();
