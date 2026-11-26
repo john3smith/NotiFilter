@@ -7,11 +7,19 @@ public final class RuleMatcher {
     private RuleMatcher() {}
 
     public static boolean matches(List<Rule> rules, String sourcePackage, String notificationText) {
+        return matches(rules, sourcePackage, notificationText, true);
+    }
+
+    static boolean matchesNonExact(List<Rule> rules, String sourcePackage, String notificationText) {
+        return matches(rules, sourcePackage, notificationText, false);
+    }
+
+    private static boolean matches(List<Rule> rules, String sourcePackage, String notificationText, boolean includeExact) {
         if (rules == null || sourcePackage == null || notificationText == null) return false;
         String haystack = notificationText.toLowerCase(Locale.ROOT);
         for (Rule rule : rules) {
-            if (!rule.enabled) continue;
-            if (!rule.matchEmpty && rule.phrase.isEmpty()) continue;
+            if (!rule.enabled || rule.phrase.isEmpty()) continue;
+            if (!includeExact && rule.exact) continue;
             if (!rule.packageName.isEmpty() && !rule.packageName.equals(sourcePackage)) continue;
             if (rule.matchesNormalized(haystack)) return true;
         }

@@ -123,7 +123,7 @@ public class RuleMatcherTest {
         assertFalse(RuleMatcher.matches(Collections.singletonList(literal), "app", "광고 이벤트 안내"));
     }
     @Test public void exactMatchRequiresFullNormalizedNotificationText() {
-        Rule exact = new Rule(1, "com.example.chat", "채팅", "광고;이벤트", true, false, true, false);
+        Rule exact = new Rule(1, "com.example.chat", "채팅", "광고;이벤트", true, false, true);
         assertTrue(RuleMatcher.matches(Collections.singletonList(exact), "com.example.chat", "광고;이벤트"));
         assertTrue(RuleMatcher.matches(Collections.singletonList(exact), "com.example.chat", "  광고;이벤트  "));
         assertFalse(RuleMatcher.matches(Collections.singletonList(exact), "com.example.chat", "광고;이벤트 안내"));
@@ -131,36 +131,68 @@ public class RuleMatcherTest {
         assertFalse(RuleMatcher.matches(Collections.singletonList(exact), "com.example.chat", "광고 이벤트"));
         assertFalse(RuleMatcher.matches(Collections.singletonList(exact), "com.other", "광고;이벤트"));
 
-        Rule multiline = new Rule(2, "", "모든 앱", "Title\nBody Line", true, false, true, false);
+        Rule multiline = new Rule(2, "", "모든 앱", "Title\nBody Line", true, false, true);
         assertTrue(RuleMatcher.matches(Collections.singletonList(multiline), "any", "TITLE\r\nbody line"));
         assertFalse(RuleMatcher.matches(Collections.singletonList(multiline), "any", "Title\nBody Line\nExtra"));
         assertFalse(RuleMatcher.matches(Collections.singletonList(multiline), "any", "Title"));
 
-        Rule emptyExact = new Rule(3, "com.example.chat", "채팅", "   ", true, false, true, false);
+        Rule emptyExact = new Rule(3, "com.example.chat", "채팅", "   ", true, false, true);
         assertFalse(RuleMatcher.matches(Collections.singletonList(emptyExact), "com.example.chat", ""));
         assertFalse(RuleMatcher.matches(Collections.singletonList(emptyExact), "com.example.chat", "anything"));
     }
-    @Test public void matchEmptyRulesOnlyMatchBlankNotifications() {
-        Rule emptyScoped = new Rule(1, "com.example.silent", "무음앱", "ignored", true, false, false, true);
-        assertEquals("", emptyScoped.phrase);
-        assertTrue(emptyScoped.matchEmpty);
-        assertFalse(emptyScoped.exact);
-        assertTrue(RuleMatcher.matches(Collections.singletonList(emptyScoped), "com.example.silent", ""));
-        assertTrue(RuleMatcher.matches(Collections.singletonList(emptyScoped), "com.example.silent", "  \n\t\u3000 "));
-        assertFalse(RuleMatcher.matches(Collections.singletonList(emptyScoped), "com.example.silent", "내용 있음"));
-        assertFalse(RuleMatcher.matches(Collections.singletonList(emptyScoped), "com.other", ""));
-        assertFalse(RuleMatcher.matches(Collections.singletonList(emptyScoped.withEnabled(false)), "com.example.silent", ""));
+    @Test public void exactRuleRemovesTitleOnlyKakaoTalkButKeepsNotificationsWithContent() {
+        String kakaoPkg = "com.kakao.talk";
+        List<Rule> rules = Collections.singletonList(
+                new Rule(1, kakaoPkg, "카카오톡", "카카오톡", true, false, true));
+
+        // 제목이 "카카오톡"이고 내용이 없는 알림들 -> 제거됨
+        String titleOnly = FilterService.extractText("카카오톡", null, null, null, null, null, null);
+        assertEquals("카카오톡", titleOnly);
+        assertEquals("카카오톡", FilterService.matchingText(rules, kakaoPkg, titleOnly, ""));
+
+        String titleAndEmptyBody = FilterService.extractText("카카오톡", "카카오톡", "", "", null, "", "");
+        assertEquals("카카오톡", titleAndEmptyBody);
+        assertEquals("카카오톡", FilterService.matchingText(rules, kakaoPkg, titleAndEmptyBody, ""));
+
+        String titleAndBlankBody = FilterService.extractText("카카오톡", null, "   ", null, null, null, null);
+        assertNotNull(FilterService.matchingText(rules, kakaoPkg, titleAndBlankBody, ""));
+
+        // 원본이 비어 있고 publicVersion만 "카카오톡"인 경우 -> 제거됨
+        assertEquals("카카오톡", FilterService.matchingText(rules, kakaoPkg, "", "카카오톡"));
+
+        // 제목이 "카카오톡"이고 내용이 있는 알림들 -> 제거되지 않음
+        String withBody = FilterService.extractText("카카오톡", null, "안녕하세요", null, null, null, null);
+        assertNull(FilterService.matchingText(rules, kakaoPkg, withBody, ""));
+
+        String withBigText = FilterService.extractText("카카오톡", null, null, "긴 메시지 내용", null, null, null);
+        assertNull(FilterService.matchingText(rules, kakaoPkg, withBigText, ""));
+
+        String withLines = FilterService.extractText("카카오톡", null, null, null,
+                new CharSequence[]{"홍길동: 안녕하세요"}, null, null);
+        assertNull(FilterService.matchingText(rules, kakaoPkg, withLines, ""));
+
+        String withSummary = FilterService.extractText("카카오톡", null, null, null, null, null, "읽지 않은 메시지 2개");
+        assertNull(FilterService.matchingText(rules, kakaoPkg, withSummary, ""));
+
+        String senderAndMessage = FilterService.extractText("홍길동", null, "카카오톡 확인해줘", null, null, null, null);
+        assertNull(FilterService.matchingText(rules, kakaoPkg, senderAndMessage, ""));
+
+        // 내용이 있는 카카오톡 알림에 잠금화면용 publicVersion이 "카카오톡"만 있어도 제거되지 않음
+        assertNull(FilterService.matchingText(rules, kakaoPkg, withBody, "카카오톡"));
+        assertNull(FilterService.matchingText(rules, kakaoPkg, senderAndMessage, "카카오톡"));
+
+        // 원본이 비어 있고 publicVersion에 내용이 있는 경우도 제거되지 않음
+        assertNull(FilterService.matchingText(rules, kakaoPkg, "", "카카오톡\n새 메시지가 도착했습니다."));
+
+        // 기존 비정확 규칙은 원본이 있어도 publicVersion 매칭 유지
+        List<Rule> nonExact = Collections.singletonList(
+                new Rule(2, kakaoPkg, "카카오톡", "내용 숨김", true, true, false));
+        assertEquals("내용 숨김", FilterService.matchingText(nonExact, kakaoPkg, senderAndMessage, "내용 숨김"));
     }
-    @Test public void withEnabledPreservesExactAndMatchEmptyModes() {
-        Rule exact = new Rule(1, "app", "App", "정확 문구", true, false, true, false).withEnabled(false).withEnabled(true);
+    @Test public void withEnabledPreservesExactMode() {
+        Rule exact = new Rule(1, "app", "App", "정확 문구", true, false, true).withEnabled(false).withEnabled(true);
         assertTrue(exact.exact);
-        assertFalse(exact.matchEmpty);
         assertTrue(RuleMatcher.matches(Collections.singletonList(exact), "app", "정확 문구"));
         assertFalse(RuleMatcher.matches(Collections.singletonList(exact), "app", "정확 문구 추가"));
-
-        Rule empty = new Rule(2, "app", "App", "", true, false, false, true).withEnabled(false).withEnabled(true);
-        assertTrue(empty.matchEmpty);
-        assertTrue(RuleMatcher.matches(Collections.singletonList(empty), "app", ""));
-        assertFalse(RuleMatcher.matches(Collections.singletonList(empty), "app", "text"));
     }
 }

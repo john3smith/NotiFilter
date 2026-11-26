@@ -109,11 +109,8 @@ public final class FilterService extends NotificationListenerService {
             this.text = text;
             this.postedAt = postedAt;
         }
-        public boolean isEmptyContent() {
-            return RuleExpression.isBlank(text);
-        }
         public boolean canCreateRule() {
-            return packageName != null && !packageName.isEmpty();
+            return !RuleExpression.isBlank(text);
         }
     }
 
@@ -173,19 +170,22 @@ public final class FilterService extends NotificationListenerService {
     }
 
     private static String matchingText(List<Rule> rules, StatusBarNotification sbn) {
-        String original = notificationText(sbn.getNotification());
-        String visible = publicText(sbn.getNotification());
-        boolean originalBlank = RuleExpression.isBlank(original);
-        boolean visibleBlank = RuleExpression.isBlank(visible);
-        if (originalBlank && visibleBlank) {
-            return RuleMatcher.matches(rules, sbn.getPackageName(), "") ? "" : null;
+        return matchingText(rules, sbn.getPackageName(),
+                notificationText(sbn.getNotification()),
+                publicText(sbn.getNotification()));
+    }
+
+    static String matchingText(List<Rule> rules, String sourcePackage, String original, String visible) {
+        boolean originalBlank = original == null || RuleExpression.isBlank(original);
+        boolean visibleBlank = visible == null || RuleExpression.isBlank(visible);
+        if (!originalBlank) {
+            if (RuleMatcher.matches(rules, sourcePackage, original)) return original;
+            // Each representation must match independently. When original text is present,
+            // do not let exact rules match a shorter redacted publicVersion.
+            return !visibleBlank && RuleMatcher.matchesNonExact(rules, sourcePackage, visible)
+                    ? visible : null;
         }
-        if (!originalBlank && RuleMatcher.matches(rules, sbn.getPackageName(), original)) {
-            return original;
-        }
-        // Each representation must match independently. Combining them could
-        // satisfy an AND rule using words that never appear together on screen.
-        return !visibleBlank && RuleMatcher.matches(rules, sbn.getPackageName(), visible)
+        return !visibleBlank && RuleMatcher.matches(rules, sourcePackage, visible)
                 ? visible : null;
     }
 
@@ -200,20 +200,32 @@ public final class FilterService extends NotificationListenerService {
         Bundle extras = notification.extras;
         if (extras == null) return "";
         try {
+            return extractText(
+                    extras.getCharSequence(Notification.EXTRA_TITLE),
+                    extras.getCharSequence(Notification.EXTRA_TITLE_BIG),
+                    extras.getCharSequence(Notification.EXTRA_TEXT),
+                    extras.getCharSequence(Notification.EXTRA_BIG_TEXT),
+                    extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES),
+                    extras.getCharSequence(Notification.EXTRA_SUB_TEXT),
+                    extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT));
+        } catch (RuntimeException malformed) { return ""; }
+    }
+
+    static String extractText(CharSequence title, CharSequence titleBig, CharSequence body,
+                              CharSequence bigText, CharSequence[] lines,
+                              CharSequence subText, CharSequence summaryText) {
         StringBuilder text = new StringBuilder();
-        append(text, extras.getCharSequence(Notification.EXTRA_TITLE));
-        append(text, extras.getCharSequence(Notification.EXTRA_TITLE_BIG));
-        append(text, extras.getCharSequence(Notification.EXTRA_TEXT));
-        append(text, extras.getCharSequence(Notification.EXTRA_BIG_TEXT));
-        CharSequence[] lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES);
+        append(text, title);
+        append(text, titleBig);
+        append(text, body);
+        append(text, bigText);
         if (lines != null) for (CharSequence line : lines) append(text, line);
-        append(text, extras.getCharSequence(Notification.EXTRA_SUB_TEXT));
-        append(text, extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT));
+        append(text, subText);
+        append(text, summaryText);
         // Expanded notifications often repeat the compact body; display it once.
         LinkedHashSet<String> unique = new LinkedHashSet<>();
         for (String part : text.toString().split("\\n")) if (!part.isEmpty()) unique.add(part);
         return String.join("\n", unique);
-        } catch (RuntimeException malformed) { return ""; }
     }
 
     private static void append(StringBuilder out, CharSequence value) {
