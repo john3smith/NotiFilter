@@ -753,21 +753,17 @@ public final class MainActivity extends Activity {
         names.setGravity(Gravity.CENTER_VERTICAL);
         names.setBackground(pressable(0x222563EB, Color.TRANSPARENT, 8));
         names.setFocusable(true);
-        String ruleSummary = rule.matchEmpty ? "내용이 없는 알림 제거"
-                : rule.exact ? "정확히 일치: " + rule.phrase
-                : "포함 문구: " + rule.phrase;
+        String ruleSummary = rule.exact ? "정확히 일치: " + rule.phrase : "포함 문구: " + rule.phrase;
         names.setContentDescription("규칙 수정: " + rule.appName + " " + ruleSummary);
         names.setOnClickListener(v -> editRule.run());
-        if (rule.matchEmpty || rule.exact) {
-            TextView badge = ModernDialog.badge(this,
-                    rule.matchEmpty ? "내용 없는 알림" : "정확히 일치",
+        if (rule.exact) {
+            TextView badge = ModernDialog.badge(this, "정확히 일치",
                     ModernDialog.SURFACE_TINT, ModernDialog.BLUE_DARK);
             LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
             bp.bottomMargin = dp(4);
             names.addView(badge, bp);
         }
-        TextView phrase = text(rule.matchEmpty ? "제목·본문이 없는 알림 자동 제거"
-                : rule.exact ? rule.phrase : "포함 문구: " + rule.phrase, 15, INK, false);
+        TextView phrase = text(rule.exact ? rule.phrase : "포함 문구: " + rule.phrase, 15, INK, false);
         LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-1, -2);
         pp.topMargin = dp(2);
         names.addView(phrase, pp);
@@ -809,9 +805,7 @@ public final class MainActivity extends Activity {
     private void showDeleteRuleDialog(Rule rule) {
         if (deleteRuleDialog != null || isFinishing() || isDestroyed()) return;
         String appLabel = rule.packageName.isEmpty() ? "모든 앱" : (rule.appName.isEmpty() ? rule.packageName : rule.appName);
-        String summary = rule.matchEmpty ? "내용이 없는 알림 제거"
-                : rule.exact ? "정확히 일치: " + rule.phrase
-                : "포함 문구: " + rule.phrase;
+        String summary = rule.exact ? "정확히 일치: " + rule.phrase : "포함 문구: " + rule.phrase;
         AlertDialog confirmation = ModernDialog.builder(this, "규칙 삭제", null)
                 .setView(ModernDialog.messageBody(this,
                         "이 차단 규칙을 삭제하시겠습니까?\n\n대상 앱: " + appLabel + "\n조건: " + summary))
@@ -841,7 +835,6 @@ public final class MainActivity extends Activity {
         final boolean editing = original != null;
         final boolean initialLiteral = editing && original.literal;
         final boolean initialExact = editing && original.exact;
-        final boolean initialEmpty = editing && original.matchEmpty;
         List<AppOption> apps = installedApps();
         final AppOption[] selected = {apps.get(0)};
         if (editing && !original.packageName.isEmpty()) {
@@ -897,7 +890,7 @@ public final class MainActivity extends Activity {
         phrase.setId(R.id.rule_phrase);
         ModernDialog.styleInput(this, phrase);
         phrase.setMinHeight(dp(54));
-        if (editing && !initialEmpty) {
+        if (editing) {
             phrase.setText(original.phrase);
             phrase.setSelection(phrase.length());
         }
@@ -920,27 +913,9 @@ public final class MainActivity extends Activity {
         exactParams.topMargin = dp(8);
         content.addView(exactCard, exactParams);
 
-        CheckBox emptyCheck = new CheckBox(this);
-        emptyCheck.setId(R.id.rule_match_empty);
-        emptyCheck.setChecked(initialEmpty);
-        LinearLayout emptyCard = ModernDialog.optionCard(this, emptyCheck,
-                "내용이 없는 알림 제거",
-                "제목과 본문이 모두 비어 있는 알림을 자동으로 제거합니다.");
-        LinearLayout.LayoutParams emptyParams = new LinearLayout.LayoutParams(-1, -2);
-        emptyParams.topMargin = dp(8);
-        content.addView(emptyCard, emptyParams);
-
         Runnable syncForm = () -> {
-            boolean matchEmpty = emptyCheck.isChecked();
-            boolean exactMode = !matchEmpty && exactCheck.isChecked();
-            exactCheck.setEnabled(!matchEmpty);
-            phrase.setEnabled(!matchEmpty);
-            phrase.setAlpha(matchEmpty ? 0.55f : 1f);
-            if (matchEmpty) {
-                phrase.setError(null);
-                phrase.setHint("내용이 없는 알림을 자동으로 제거합니다");
-                phraseLabel.setText("알림 문구 · 내용 없음 조건 사용 중");
-            } else if (exactMode) {
+            boolean exactMode = exactCheck.isChecked();
+            if (exactMode) {
                 phrase.setSingleLine(false);
                 phrase.setMaxLines(4);
                 phrase.setHint("예: 정확히 일치할 알림 전체 문구");
@@ -956,15 +931,13 @@ public final class MainActivity extends Activity {
                 phraseLabel.setText("포함 문구 · ; 로 AND (모두 포함)");
             }
             ModernDialog.updateOptionCard(this, exactCard, exactCheck);
-            ModernDialog.updateOptionCard(this, emptyCard, emptyCheck);
         };
         exactCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
             phrase.setError(null);
             syncForm.run();
         });
-        emptyCheck.setOnCheckedChangeListener((buttonView, isChecked) -> syncForm.run());
         help.setOnClickListener(v -> {
-            if (initialLiteral && !exactCheck.isChecked() && !emptyCheck.isChecked()) {
+            if (initialLiteral && !exactCheck.isChecked()) {
                 Toast.makeText(this, "알림에서 만든 규칙은 쉼표·세미콜론·줄바꿈도 문구 그대로 비교합니다. 영문 대소문자는 구분하지 않습니다.", Toast.LENGTH_LONG).show();
             } else {
                 showRuleHelp();
@@ -1012,19 +985,16 @@ public final class MainActivity extends Activity {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
                 // A queued second positive click after dismissal must not save twice.
                 if (addRuleDialog != dialog || !dialog.isShowing()) return;
-                boolean matchEmpty = emptyCheck.isChecked();
-                boolean exactMode = !matchEmpty && exactCheck.isChecked();
-                boolean literalMode = !matchEmpty && !exactMode && initialLiteral;
-                String value = matchEmpty ? "" : phrase.getText().toString().trim();
-                if (!matchEmpty) {
-                    if (TextUtils.isEmpty(value)) {
-                        phrase.setError("문구를 입력해 주세요");
-                        return;
-                    }
-                    if (!exactMode && !literalMode && !RuleMatcher.isValidExpression(value)) {
-                        phrase.setError("세미콜론(;) 앞뒤에 문구를 입력해 주세요. 빈 조건은 사용할 수 없습니다.");
-                        return;
-                    }
+                boolean exactMode = exactCheck.isChecked();
+                boolean literalMode = !exactMode && initialLiteral;
+                String value = phrase.getText().toString().trim();
+                if (TextUtils.isEmpty(value)) {
+                    phrase.setError("문구를 입력해 주세요");
+                    return;
+                }
+                if (!exactMode && !literalMode && !RuleMatcher.isValidExpression(value)) {
+                    phrase.setError("세미콜론(;) 앞뒤에 문구를 입력해 주세요. 빈 조건은 사용할 수 없습니다.");
+                    return;
                 }
                 List<Rule> rules = store.load();
                 Rule savedRule;
@@ -1040,11 +1010,11 @@ public final class MainActivity extends Activity {
                         return;
                     }
                     savedRule = new Rule(original.id, selected[0].packageName, selected[0].label,
-                            value, rules.get(index).enabled, literalMode, exactMode, matchEmpty);
+                            value, rules.get(index).enabled, literalMode, exactMode);
                     rules.set(index, savedRule);
                 } else {
                     savedRule = new Rule(System.currentTimeMillis(), selected[0].packageName,
-                            selected[0].label, value, true, false, exactMode, matchEmpty);
+                            selected[0].label, value, true, false, exactMode);
                     rules.add(savedRule);
                 }
                 store.save(rules);
@@ -1115,18 +1085,10 @@ public final class MainActivity extends Activity {
                 row.addView(text(item.appName, 15, ModernDialog.INK, true), new LinearLayout.LayoutParams(-1, -2));
                 TextView pkgView = text(item.packageName, 11, ModernDialog.HINT, false);
                 row.addView(pkgView, new LinearLayout.LayoutParams(-1, -2));
-                if (item.isEmptyContent()) {
-                    TextView emptyChip = ModernDialog.badge(MainActivity.this,
-                            "내용 없음 · 빈 알림 제거 규칙으로 추가",
-                            ModernDialog.SURFACE_TINT, ModernDialog.BLUE_DARK);
-                    LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-2, -2);
-                    cp.topMargin = dp(8);
-                    row.addView(emptyChip, cp);
-                } else {
-                    TextView body = text(item.text, 13, ModernDialog.BODY, false);
-                    body.setPadding(0, dp(6), 0, 0);
-                    row.addView(body, new LinearLayout.LayoutParams(-1, -2));
-                }
+                TextView body = text(!item.canCreateRule() ? "문구가 없어 규칙을 만들 수 없는 알림입니다." : item.text,
+                        13, !item.canCreateRule() ? ModernDialog.MUTED : ModernDialog.BODY, false);
+                body.setPadding(0, dp(6), 0, 0);
+                row.addView(body, new LinearLayout.LayoutParams(-1, -2));
                 row.setAlpha(item.canCreateRule() ? 1f : 0.6f);
                 return row;
             }
@@ -1175,7 +1137,7 @@ public final class MainActivity extends Activity {
                     } else {
                         items.addAll(snapshot); adapter.notifyDataSetChanged(); list.setEnabled(true);
                         status.setText(items.isEmpty() ? "읽을 수 있는 알림이 없습니다. 보안폴더 알림이 없다면 보안폴더의 알림 설정을 확인해 주세요."
-                                : "일시정지는 유지됩니다. 내용이 없는 알림도 선택해 제거 규칙으로 추가할 수 있습니다.");
+                                : "선택하면 규칙 저장 후 1회 적용합니다. 일시정지는 유지됩니다. 내용 숨김 알림은 ‘내용 숨김 표시’를 선택하세요.");
                     }
                 });
             });
@@ -1188,14 +1150,9 @@ public final class MainActivity extends Activity {
             List<Rule> rules = store.load();
             long nextId = System.currentTimeMillis();
             for (Rule rule : rules) if (rule.id >= nextId) nextId = rule.id + 1;
-            Rule saved;
-            if (item.isEmptyContent()) {
-                saved = new Rule(nextId, item.packageName, item.appName, "", true, false, false, true);
-            } else {
-                boolean exactOnly = exactCheck.isChecked();
-                saved = new Rule(nextId, item.packageName, item.appName, item.text,
-                        true, !exactOnly, exactOnly, false);
-            }
+            boolean exactOnly = exactCheck.isChecked();
+            Rule saved = new Rule(nextId, item.packageName, item.appName, item.text,
+                    true, !exactOnly, exactOnly);
             rules.add(saved);
             store.save(rules);
             expandedApps.add(saved.packageName);
@@ -1234,8 +1191,6 @@ public final class MainActivity extends Activity {
                 + "• 정확히 같은 알람만 제거\n"
                 + "알림의 전체 내용(제목·본문)이 입력한 문구와 정확히 일치할 때만 제거합니다. "
                 + "세미콜론(;)도 기호 그대로 비교합니다.\n\n"
-                + "• 내용이 없는 알림 제거\n"
-                + "제목과 본문이 모두 비어 있는 알림을 자동으로 제거합니다.\n\n"
                 + "• 공통 안내\n"
                 + "문구 앞뒤 공백은 무시하고 영문 대소문자는 구분하지 않습니다. "
                 + "문구 안의 띄어쓰기와 쉼표(,)는 그대로 비교합니다.";

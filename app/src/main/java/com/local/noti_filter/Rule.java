@@ -10,32 +10,30 @@ public final class Rule {
     public final boolean enabled;
     public final boolean literal;
     public final boolean exact;
-    public final boolean matchEmpty;
     // Bound to this immutable rule's lifetime, independent of shared-cache eviction.
     private volatile RuleExpression compiledExpression;
 
     public Rule(long id, String packageName, String appName, String phrase, boolean enabled) {
-        this(id, packageName, appName, phrase, enabled, false, false, false);
+        this(id, packageName, appName, phrase, enabled, false, false);
     }
 
     public Rule(long id, String packageName, String appName, String phrase, boolean enabled, boolean literal) {
-        this(id, packageName, appName, phrase, enabled, literal, false, false);
+        this(id, packageName, appName, phrase, enabled, literal, false);
     }
 
     public Rule(long id, String packageName, String appName, String phrase, boolean enabled,
-                boolean literal, boolean exact, boolean matchEmpty) {
+                boolean literal, boolean exact) {
         this.id = id;
         this.packageName = packageName == null ? "" : packageName;
         this.appName = appName == null ? "" : appName;
-        this.matchEmpty = matchEmpty;
-        this.exact = !matchEmpty && exact;
-        this.literal = !matchEmpty && !exact && literal;
-        this.phrase = matchEmpty || phrase == null ? "" : normalizeLineEndings(phrase).trim();
+        this.exact = exact;
+        this.literal = !exact && literal;
+        this.phrase = phrase == null ? "" : normalizeLineEndings(phrase).trim();
         this.enabled = enabled;
     }
 
     public Rule withEnabled(boolean value) {
-        return new Rule(id, packageName, appName, phrase, value, literal, exact, matchEmpty);
+        return new Rule(id, packageName, appName, phrase, value, literal, exact);
     }
 
     static String normalizeLineEndings(String value) {
@@ -43,7 +41,6 @@ public final class Rule {
     }
 
     boolean matchesNormalized(String text) {
-        if (matchEmpty) return RuleExpression.isBlank(text);
         if (exact) {
             return !phrase.isEmpty()
                     && normalizeLineEndings(text).trim().equals(phrase.toLowerCase(Locale.ROOT));

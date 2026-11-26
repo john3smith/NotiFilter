@@ -39,7 +39,7 @@ final class RuleStoreChecks {
             if (!ui.load().isEmpty()) failures.add("partially accepted array"); else rejected++;
 
             // Malformed optional boolean flags must also fail closed.
-            for (String opt : new String[]{"literal", "exact", "matchEmpty"}) {
+            for (String opt : new String[]{"literal", "exact"}) {
                 for (Object value : new Object[]{JSONObject.NULL, "true", 1}) {
                     JSONObject item = valid().put(opt, value);
                     String raw = new JSONArray().put(item).toString();
@@ -54,13 +54,12 @@ final class RuleStoreChecks {
             expected.add(new Rule(2, "", "모든 앱", "sale;done", true));
             expected.add(new Rule(3, "", "모든 앱", "disabled", false));
             expected.add(new Rule(4, "", "모든 앱", "event", true));
-            expected.add(new Rule(5, "com.example.exact", "EXACT APP", "only this", true, false, true, false));
-            expected.add(new Rule(6, "com.example.empty", "EMPTY APP", "", true, false, false, true));
+            expected.add(new Rule(5, "com.example.exact", "EXACT APP", "only this", true, false, true));
             ui.save(expected);
             List<Rule> loaded = service.load();
-            if (loaded.size() != 6 || !loaded.get(0).packageName.equals("com.example.scope")
+            if (loaded.size() != 5 || !loaded.get(0).packageName.equals("com.example.scope")
                     || !loaded.get(1).packageName.isEmpty() || loaded.get(2).enabled
-                    || !loaded.get(4).exact || !loaded.get(5).matchEmpty)
+                    || !loaded.get(4).exact)
                 throw new AssertionError("Valid scope/toggle round trip");
             if (!RuleMatcher.matches(loaded, "com.example.scope", "COUPON")
                     || RuleMatcher.matches(loaded, "com.example.other", "coupon")
@@ -69,12 +68,10 @@ final class RuleStoreChecks {
                     || RuleMatcher.matches(loaded, "com.example.other", "sale")
                     || RuleMatcher.matches(loaded, "com.example.other", "disabled")
                     || !RuleMatcher.matches(loaded, "com.example.exact", "only this")
-                    || RuleMatcher.matches(loaded, "com.example.exact", "only this extra")
-                    || !RuleMatcher.matches(loaded, "com.example.empty", "")
-                    || RuleMatcher.matches(loaded, "com.example.empty", "non-empty"))
+                    || RuleMatcher.matches(loaded, "com.example.exact", "only this extra"))
                 throw new AssertionError("Valid matching regression");
             loaded.clear();
-            if (service.load().size() != 6) throw new AssertionError("Cache defensive copy");
+            if (service.load().size() != 5) throw new AssertionError("Cache defensive copy");
             expected.set(0, expected.get(0).withEnabled(false)); ui.save(expected);
             if (RuleMatcher.matches(service.load(), "com.example.scope", "coupon"))
                 throw new AssertionError("Service cache ignored updated UI preferences");
