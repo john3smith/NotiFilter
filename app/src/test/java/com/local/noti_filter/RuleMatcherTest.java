@@ -122,4 +122,45 @@ public class RuleMatcherTest {
         assertTrue(RuleMatcher.matches(Collections.singletonList(literal), "app", "[광고;이벤트,안내]"));
         assertFalse(RuleMatcher.matches(Collections.singletonList(literal), "app", "광고 이벤트 안내"));
     }
+    @Test public void exactMatchRequiresFullNormalizedNotificationText() {
+        Rule exact = new Rule(1, "com.example.chat", "채팅", "광고;이벤트", true, false, true, false);
+        assertTrue(RuleMatcher.matches(Collections.singletonList(exact), "com.example.chat", "광고;이벤트"));
+        assertTrue(RuleMatcher.matches(Collections.singletonList(exact), "com.example.chat", "  광고;이벤트  "));
+        assertFalse(RuleMatcher.matches(Collections.singletonList(exact), "com.example.chat", "광고;이벤트 안내"));
+        assertFalse(RuleMatcher.matches(Collections.singletonList(exact), "com.example.chat", "[광고;이벤트]"));
+        assertFalse(RuleMatcher.matches(Collections.singletonList(exact), "com.example.chat", "광고 이벤트"));
+        assertFalse(RuleMatcher.matches(Collections.singletonList(exact), "com.other", "광고;이벤트"));
+
+        Rule multiline = new Rule(2, "", "모든 앱", "Title\nBody Line", true, false, true, false);
+        assertTrue(RuleMatcher.matches(Collections.singletonList(multiline), "any", "TITLE\r\nbody line"));
+        assertFalse(RuleMatcher.matches(Collections.singletonList(multiline), "any", "Title\nBody Line\nExtra"));
+        assertFalse(RuleMatcher.matches(Collections.singletonList(multiline), "any", "Title"));
+
+        Rule emptyExact = new Rule(3, "com.example.chat", "채팅", "   ", true, false, true, false);
+        assertFalse(RuleMatcher.matches(Collections.singletonList(emptyExact), "com.example.chat", ""));
+        assertFalse(RuleMatcher.matches(Collections.singletonList(emptyExact), "com.example.chat", "anything"));
+    }
+    @Test public void matchEmptyRulesOnlyMatchBlankNotifications() {
+        Rule emptyScoped = new Rule(1, "com.example.silent", "무음앱", "ignored", true, false, false, true);
+        assertEquals("", emptyScoped.phrase);
+        assertTrue(emptyScoped.matchEmpty);
+        assertFalse(emptyScoped.exact);
+        assertTrue(RuleMatcher.matches(Collections.singletonList(emptyScoped), "com.example.silent", ""));
+        assertTrue(RuleMatcher.matches(Collections.singletonList(emptyScoped), "com.example.silent", "  \n\t\u3000 "));
+        assertFalse(RuleMatcher.matches(Collections.singletonList(emptyScoped), "com.example.silent", "내용 있음"));
+        assertFalse(RuleMatcher.matches(Collections.singletonList(emptyScoped), "com.other", ""));
+        assertFalse(RuleMatcher.matches(Collections.singletonList(emptyScoped.withEnabled(false)), "com.example.silent", ""));
+    }
+    @Test public void withEnabledPreservesExactAndMatchEmptyModes() {
+        Rule exact = new Rule(1, "app", "App", "정확 문구", true, false, true, false).withEnabled(false).withEnabled(true);
+        assertTrue(exact.exact);
+        assertFalse(exact.matchEmpty);
+        assertTrue(RuleMatcher.matches(Collections.singletonList(exact), "app", "정확 문구"));
+        assertFalse(RuleMatcher.matches(Collections.singletonList(exact), "app", "정확 문구 추가"));
+
+        Rule empty = new Rule(2, "app", "App", "", true, false, false, true).withEnabled(false).withEnabled(true);
+        assertTrue(empty.matchEmpty);
+        assertTrue(RuleMatcher.matches(Collections.singletonList(empty), "app", ""));
+        assertFalse(RuleMatcher.matches(Collections.singletonList(empty), "app", "text"));
+    }
 }

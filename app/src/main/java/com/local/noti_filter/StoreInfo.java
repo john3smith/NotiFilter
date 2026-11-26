@@ -40,13 +40,19 @@ public final class StoreInfo {
         text += "\n\n판매자: " + activity.getString(R.string.store_publisher_name)
                 + "\n고객지원: " + activity.getString(R.string.store_support_email);
         TextView content = new TextView(activity);
-        int pad = Math.round(20 * activity.getResources().getDisplayMetrics().density);
-        content.setPadding(pad, pad, pad, pad);
-        content.setTextSize(15); content.setText(text); content.setTextIsSelectable(true);
+        int padH = ModernDialog.dp(activity, 24);
+        int padV = ModernDialog.dp(activity, 12);
+        content.setPadding(padH, padV, padH, padV);
+        content.setTextSize(14);
+        content.setTextColor(ModernDialog.BODY);
+        content.setLineSpacing(ModernDialog.dp(activity, 3), 1f);
+        content.setText(text);
+        content.setTextIsSelectable(true);
         Linkify.addLinks(content, Linkify.WEB_URLS | Linkify.EMAIL_ADDRESSES);
         content.setMovementMethod(LinkMovementMethod.getInstance());
         ScrollView scroll = new ScrollView(activity); scroll.addView(content);
-        AlertDialog.Builder dialog = new AlertDialog.Builder(activity).setTitle("개인정보·권한 안내")
+        AlertDialog.Builder dialog = ModernDialog.builder(activity, "개인정보·권한 안내",
+                        "기기 내부에서만 알림을 처리하며 외부로 전송하지 않습니다.")
                 .setView(scroll).setPositiveButton("닫기", null);
         String url = activity.getString(R.string.store_privacy_url);
         if (url.startsWith("https://")) dialog.setNeutralButton("웹 방침 보기", (d, which) -> {
@@ -70,10 +76,13 @@ public final class StoreInfo {
             text = bytes.toString(StandardCharsets.UTF_8.name());
         } catch (java.io.IOException error) { text = "고지를 불러올 수 없습니다. 배포 저장소의 store 폴더를 확인해 주세요."; }
         TextView view = new TextView(activity); view.setText(text); view.setTextSize(13);
-        int pad = Math.round(20 * activity.getResources().getDisplayMetrics().density);
-        view.setPadding(pad, pad, pad, pad); view.setTextIsSelectable(true);
+        view.setTextColor(ModernDialog.BODY);
+        view.setLineSpacing(ModernDialog.dp(activity, 2), 1f);
+        int padH = ModernDialog.dp(activity, 24);
+        int padV = ModernDialog.dp(activity, 12);
+        view.setPadding(padH, padV, padH, padV); view.setTextIsSelectable(true);
         ScrollView scroll = new ScrollView(activity); scroll.addView(view);
-        showDialog.accept(new AlertDialog.Builder(activity).setTitle("오픈소스 고지").setView(scroll)
+        showDialog.accept(ModernDialog.builder(activity, "오픈소스 고지", null).setView(scroll)
                 .setPositiveButton("닫기", null).create());
     }
 

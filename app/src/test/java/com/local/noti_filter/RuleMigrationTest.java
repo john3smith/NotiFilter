@@ -75,12 +75,16 @@ public class RuleMigrationTest {
     @Test public void literalAndPlainRulesAreUntouched() {
         Rule literal = new Rule(1, "app", "App", "광고;이벤트,안내", true, true);
         Rule plain = new Rule(2, "", "", "쿠폰", false);
-        List<Rule> migrated = RuleMigration.fromLegacy(Arrays.asList(literal, plain));
-        assertEquals(2, migrated.size());
+        Rule exact = new Rule(3, "app", "App", "정확;문구,그대로", true, false, true, false);
+        Rule empty = new Rule(4, "app", "App", "", true, false, false, true);
+        List<Rule> migrated = RuleMigration.fromLegacy(Arrays.asList(literal, plain, exact, empty));
+        assertEquals(4, migrated.size());
         assertSame(literal, migrated.get(0));
         assertEquals("쿠폰", migrated.get(1).phrase);
         assertEquals(2, migrated.get(1).id);
         assertFalse(migrated.get(1).enabled);
+        assertSame(exact, migrated.get(2));
+        assertSame(empty, migrated.get(3));
     }
 
     @Test public void malformedLegacyRulesStayInvalidAndSingle() {

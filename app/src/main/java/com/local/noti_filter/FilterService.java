@@ -109,8 +109,11 @@ public final class FilterService extends NotificationListenerService {
             this.text = text;
             this.postedAt = postedAt;
         }
+        public boolean isEmptyContent() {
+            return RuleExpression.isBlank(text);
+        }
         public boolean canCreateRule() {
-            return text.codePoints().anyMatch(c -> !Character.isWhitespace(c) && !Character.isSpaceChar(c));
+            return packageName != null && !packageName.isEmpty();
         }
     }
 
@@ -171,11 +174,18 @@ public final class FilterService extends NotificationListenerService {
 
     private static String matchingText(List<Rule> rules, StatusBarNotification sbn) {
         String original = notificationText(sbn.getNotification());
-        if (RuleMatcher.matches(rules, sbn.getPackageName(), original)) return original;
         String visible = publicText(sbn.getNotification());
+        boolean originalBlank = RuleExpression.isBlank(original);
+        boolean visibleBlank = RuleExpression.isBlank(visible);
+        if (originalBlank && visibleBlank) {
+            return RuleMatcher.matches(rules, sbn.getPackageName(), "") ? "" : null;
+        }
+        if (!originalBlank && RuleMatcher.matches(rules, sbn.getPackageName(), original)) {
+            return original;
+        }
         // Each representation must match independently. Combining them could
         // satisfy an AND rule using words that never appear together on screen.
-        return !visible.isEmpty() && RuleMatcher.matches(rules, sbn.getPackageName(), visible)
+        return !visibleBlank && RuleMatcher.matches(rules, sbn.getPackageName(), visible)
                 ? visible : null;
     }
 

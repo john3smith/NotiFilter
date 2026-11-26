@@ -1,5 +1,7 @@
 package com.local.noti_filter;
 
+import java.util.Locale;
+
 public final class Rule {
     public final long id;
     public final String packageName;
@@ -7,28 +9,49 @@ public final class Rule {
     public final String phrase;
     public final boolean enabled;
     public final boolean literal;
+    public final boolean exact;
+    public final boolean matchEmpty;
     // Bound to this immutable rule's lifetime, independent of shared-cache eviction.
     private volatile RuleExpression compiledExpression;
 
     public Rule(long id, String packageName, String appName, String phrase, boolean enabled) {
-        this(id, packageName, appName, phrase, enabled, false);
+        this(id, packageName, appName, phrase, enabled, false, false, false);
     }
 
     public Rule(long id, String packageName, String appName, String phrase, boolean enabled, boolean literal) {
+        this(id, packageName, appName, phrase, enabled, literal, false, false);
+    }
+
+    public Rule(long id, String packageName, String appName, String phrase, boolean enabled,
+                boolean literal, boolean exact, boolean matchEmpty) {
         this.id = id;
         this.packageName = packageName == null ? "" : packageName;
         this.appName = appName == null ? "" : appName;
-        this.phrase = phrase == null ? "" : phrase.trim();
+        this.matchEmpty = matchEmpty;
+        this.exact = !matchEmpty && exact;
+        this.literal = !matchEmpty && !exact && literal;
+        this.phrase = matchEmpty || phrase == null ? "" : normalizeLineEndings(phrase).trim();
         this.enabled = enabled;
-        this.literal = literal;
     }
 
     public Rule withEnabled(boolean value) {
-        return new Rule(id, packageName, appName, phrase, value, literal);
+        return new Rule(id, packageName, appName, phrase, value, literal, exact, matchEmpty);
+    }
+
+    static String normalizeLineEndings(String value) {
+        return value.indexOf('\r') < 0 ? value : value.replace("\r\n", "\n").replace('\r', '\n');
     }
 
     boolean matchesNormalized(String text) {
-        if (literal) return !phrase.isEmpty() && text.contains(phrase.toLowerCase(java.util.Locale.ROOT));
+        if (matchEmpty) return RuleExpression.isBlank(text);
+        if (exact) {
+            return !phrase.isEmpty()
+                    && normalizeLineEndings(text).trim().equals(phrase.toLowerCase(Locale.ROOT));
+        }
+        if (literal) {
+            return !phrase.isEmpty()
+                    && normalizeLineEndings(text).contains(phrase.toLowerCase(Locale.ROOT));
+        }
         RuleExpression expression = compiledExpression;
         if (expression == null) {
             expression = RuleExpression.compile(phrase);
