@@ -11,6 +11,9 @@
     <item name="settings_back" type="id" />
     <item name="rule_choose_app" type="id" />
     <item name="rule_phrase" type="id" />
+    <item name="rule_exact" type="id" />
+    <item name="rule_match_empty" type="id" />
+    <item name="active_notification_exact" type="id" />
     <item name="app_search" type="id" />
     <item name="app_load_status" type="id" />
     <item name="sort_newest" type="id" />

@@ -39,7 +39,9 @@ public final class SettingsActivity extends Activity {
         dialog.setOnDismissListener(closed -> {
             if (settingsDialog == dialog) settingsDialog = null;
         });
+        dialog.setOnShowListener(ignored -> ModernDialog.styleButtons(dialog, false));
         dialog.show();
+        ModernDialog.applyChrome(dialog);
     }
     private int dp(int value) { return Math.round(getResources().getDisplayMetrics().density * value); }
     private GradientDrawable shape(int color) {
@@ -144,18 +146,24 @@ public final class SettingsActivity extends Activity {
         // Keep actions in the same bounded scroll area as the disclosure. The platform
         // three-button footer can exceed a short window when large text stacks it.
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(24), dp(8), dp(24), dp(16));
-        content.addView(text("규칙 검사를 위해 알림의 앱·제목·본문을 읽고, 일치하는 알림을 24시간씩 숨깁니다. 숨김이 확인된 알림 내용은 기기 내부 이력에 최대 1,000개 저장하며 이력 화면에서 지울 수 있습니다. 개발자 서버로 전송하지 않습니다. 권한을 거부하면 자동 필터만 사용할 수 없으며 Android 설정에서 언제든 해제할 수 있습니다.", 18, INK, false),
-                new LinearLayout.LayoutParams(-1, -2));
+        content.setPadding(dp(24), dp(8), dp(24), dp(20));
+        TextView body = text("규칙 검사를 위해 알림의 앱·제목·본문을 읽고, 일치하는 알림을 24시간씩 숨깁니다. 숨김이 확인된 알림 내용은 기기 내부 이력에 최대 1,000개 저장하며 이력 화면에서 지울 수 있습니다. 개발자 서버로 전송하지 않습니다. 권한을 거부하면 자동 필터만 사용할 수 없으며 Android 설정에서 언제든 해제할 수 있습니다.", 15, ModernDialog.BODY, false);
+        body.setLineSpacing(dp(4), 1f);
+        content.addView(body, new LinearLayout.LayoutParams(-1, -2));
         ScrollView scroll = new ScrollView(this); scroll.addView(content);
-        AlertDialog disclosure = new AlertDialog.Builder(this).setTitle("알림 접근 권한 사용 안내")
+        AlertDialog disclosure = ModernDialog.builder(this, "알림 접근 권한 사용 안내",
+                "자동 알림 숨김을 위해 필요한 권한 안내입니다.")
                 .setView(scroll).create();
-        Button cancel = button("취소"); cancel.setId(android.R.id.button2);
-        Button privacy = button("개인정보 안내"); privacy.setId(android.R.id.button3);
         Button consent = button("동의하고 설정 열기"); consent.setId(android.R.id.button1);
-        for (Button action : new Button[] {cancel, privacy, consent}) {
+        consent.setTextColor(Color.WHITE);
+        consent.setBackground(ModernDialog.ripple(this, 0x33FFFFFF, BLUE, 12));
+        Button privacy = button("개인정보 안내"); privacy.setId(android.R.id.button3);
+        Button cancel = button("취소"); cancel.setId(android.R.id.button2);
+        cancel.setTextColor(ModernDialog.BODY);
+        cancel.setBackground(ModernDialog.ripple(this, 0x1A1E293B, ModernDialog.SURFACE_DISABLED, 12));
+        for (Button action : new Button[] {consent, privacy, cancel}) {
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-            params.topMargin = dp(12); content.addView(action, params);
+            params.topMargin = dp(10); content.addView(action, params);
         }
         cancel.setOnClickListener(view -> disclosure.dismiss());
         privacy.setOnClickListener(view -> {

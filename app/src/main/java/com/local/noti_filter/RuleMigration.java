@@ -20,8 +20,9 @@ final class RuleMigration {
         for (Rule rule : legacy) used.add(rule.id);
         List<Rule> result = new ArrayList<>(legacy.size());
         for (Rule rule : legacy) {
-            List<String> alternatives = rule.literal ? null : legacyAlternatives(rule.phrase);
-            if (rule.literal) {
+            boolean rawMode = rule.literal || rule.exact || rule.matchEmpty;
+            List<String> alternatives = rawMode ? null : legacyAlternatives(rule.phrase);
+            if (rawMode) {
                 result.add(rule);
             } else if (alternatives == null) {
                 // Malformed legacy expressions never matched; keep them invalid (same blank terms).
@@ -64,6 +65,7 @@ final class RuleMigration {
     }
 
     private static Rule copy(Rule rule, long id, String phrase) {
-        return new Rule(id, rule.packageName, rule.appName, phrase, rule.enabled, rule.literal);
+        return new Rule(id, rule.packageName, rule.appName, phrase, rule.enabled,
+                rule.literal, rule.exact, rule.matchEmpty);
     }
 }

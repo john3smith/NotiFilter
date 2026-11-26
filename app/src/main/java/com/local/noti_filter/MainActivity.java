@@ -22,6 +22,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.BaseAdapter;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -139,72 +140,8 @@ public final class MainActivity extends Activity {
         return d;
     }
 
-    /**
-     * Draws a thin solid outline of contrasting color behind the glyphs, then lets the
-     * platform draw the original text on top. Unlike a shadow layer there is no blur.
-     * Only the text layout is stroked, so backgrounds and compound drawables draw once.
-     */
-    static final class TextHalo {
-        private TextHalo() {}
-
-        static void drawOutline(TextView view, android.graphics.Canvas canvas) {
-            android.text.Layout layout = view.getLayout();
-            if (layout == null || TextUtils.isEmpty(view.getText())) return;
-            int color = view.getCurrentTextColor();
-            float luminance = (0.299f * Color.red(color) + 0.587f * Color.green(color) + 0.114f * Color.blue(color)) / 255f;
-            int alpha = Color.alpha(color);
-            int halo = luminance > 0.6f ? Color.argb(alpha * 200 / 255, 0, 0, 0)
-                    : Color.argb(alpha * 235 / 255, 255, 255, 255);
-            android.text.TextPaint paint = view.getPaint();
-            android.graphics.Paint.Style style = paint.getStyle();
-            float width = paint.getStrokeWidth();
-            android.graphics.Paint.Join join = paint.getStrokeJoin();
-            android.graphics.Paint.Cap cap = paint.getStrokeCap();
-            int saved = canvas.save();
-            try {
-                paint.setStyle(android.graphics.Paint.Style.STROKE);
-                // The stroke is centered on the glyph edge; the fill drawn later covers the inner half.
-                paint.setStrokeWidth(2 * view.getResources().getDisplayMetrics().density);
-                paint.setStrokeJoin(android.graphics.Paint.Join.ROUND);
-                paint.setStrokeCap(android.graphics.Paint.Cap.ROUND);
-                paint.setColor(halo);
-                canvas.translate(view.getTotalPaddingLeft(), view.getTotalPaddingTop());
-                layout.draw(canvas);
-            } finally {
-                canvas.restoreToCount(saved);
-                paint.setStyle(style);
-                paint.setStrokeWidth(width);
-                paint.setStrokeJoin(join);
-                paint.setStrokeCap(cap);
-                paint.setColor(color);
-            }
-        }
-    }
-
-    static final class HaloTextView extends TextView {
-        private boolean halo;
-        public HaloTextView(android.content.Context context) { super(context); }
-        public HaloTextView(android.content.Context context, android.util.AttributeSet attrs) { super(context, attrs); }
-        void setHalo(boolean enabled) { if (halo != enabled) { halo = enabled; invalidate(); } }
-        @Override protected void onDraw(android.graphics.Canvas canvas) {
-            if (halo) TextHalo.drawOutline(this, canvas);
-            super.onDraw(canvas);
-        }
-    }
-
-    static final class HaloButton extends Button {
-        private boolean halo;
-        public HaloButton(android.content.Context context) { super(context); }
-        public HaloButton(android.content.Context context, android.util.AttributeSet attrs) { super(context, attrs); }
-        void setHalo(boolean enabled) { if (halo != enabled) { halo = enabled; invalidate(); } }
-        @Override protected void onDraw(android.graphics.Canvas canvas) {
-            if (halo) TextHalo.drawOutline(this, canvas);
-            super.onDraw(canvas);
-        }
-    }
-
     private TextView text(String value, int size, int color, boolean bold) {
-        TextView t = new HaloTextView(this);
+        TextView t = new TextView(this);
         t.setText(value);
         t.setTextSize(size);
         t.setTextColor(color);
@@ -249,7 +186,7 @@ public final class MainActivity extends Activity {
         });
         scroll.addView(root);
         // The photo stays fixed behind the scrolling content in its original colors;
-        // only frame and button colors are translucent, and loose text gets its own halo.
+        // only frame and button colors are translucent, and text stays clean without outlines.
         FrameLayout screen = new FrameLayout(this);
         screen.setBackgroundColor(BG);
         backgroundImage = new ImageView(this);
@@ -454,7 +391,6 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
         fp.topMargin = dp(8);
         root.addView(foot, fp);
-        if (BackgroundPhoto.hasPhoto(this)) addTextHalos(root);
     }
 
     private void applyBackground() {
@@ -502,22 +438,6 @@ public final class MainActivity extends Activity {
         backgroundImage.setVisibility(visibility);
     }
 
-    /**
-     * Gives each text its own outline over a photo instead of veiling the whole image:
-     * dark text gets a thin light outline, light text a dark one, with no blur.
-     * The halo color follows the current text color, so checked/disabled states keep working.
-     */
-    private void addTextHalos(View view) {
-        if (view instanceof HaloTextView) {
-            ((HaloTextView) view).setHalo(true);
-        } else if (view instanceof HaloButton) {
-            ((HaloButton) view).setHalo(true);
-        } else if (view instanceof android.view.ViewGroup) {
-            android.view.ViewGroup group = (android.view.ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); i++) addTextHalos(group.getChildAt(i));
-        }
-    }
-
     private void showBackgroundDialog(Bundle restored) {
         if (backgroundDialog != null || isFinishing() || isDestroyed()) return;
         if (restored == null) {
@@ -540,10 +460,12 @@ public final class MainActivity extends Activity {
 
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(22), dp(12), dp(22), dp(12));
-        TextView status = text("", 14, MUTED, false);
+        content.setPadding(dp(24), dp(8), dp(24), dp(12));
+        TextView status = text("", 13, ModernDialog.BODY, false);
         status.setId(R.id.background_status);
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        status.setPadding(dp(14), dp(12), dp(14), dp(12));
+        status.setBackground(ModernDialog.outlined(this, ModernDialog.SURFACE_MUTED, ModernDialog.BORDER, 1f, 12));
         content.addView(status, new LinearLayout.LayoutParams(-1, -2));
         LinearLayout actions = new AdaptiveRow(this, true);
         Button pick = button("사진 선택", true);
@@ -551,38 +473,43 @@ public final class MainActivity extends Activity {
         actions.addView(pick, new LinearLayout.LayoutParams(0, -2, 1));
         Button remove = button("사진 삭제", false);
         remove.setId(R.id.background_remove);
-        remove.setTextColor(Color.rgb(193, 60, 60));
+        remove.setTextColor(ModernDialog.DANGER);
+        remove.setBackground(ModernDialog.ripple(this, 0x22DC2626, ModernDialog.DANGER_SOFT, 12));
         actions.addView(remove, new LinearLayout.LayoutParams(0, -2, 1));
         LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(-1, -2);
-        actionsParams.topMargin = dp(12);
+        actionsParams.topMargin = dp(14);
         content.addView(actions, actionsParams);
-        TextView modeLabel = text("표시 방식", 14, MUTED, true);
+        TextView modeLabel = ModernDialog.sectionLabel(this, "표시 방식");
         LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(-1, -2);
         labelParams.topMargin = dp(18);
         content.addView(modeLabel, labelParams);
         android.widget.RadioGroup modes = new android.widget.RadioGroup(this);
         int[] modeIds = {R.id.background_mode_fill, R.id.background_mode_crop, R.id.background_mode_fit};
         List<android.widget.RadioButton> modeButtons = new ArrayList<>();
+        Runnable syncModes = () -> {
+            for (android.widget.RadioButton option : modeButtons) ModernDialog.updateRadioOption(this, option);
+        };
         for (BackgroundPhoto.Mode mode : BackgroundPhoto.Mode.values()) {
             android.widget.RadioButton option = new android.widget.RadioButton(this);
             option.setId(modeIds[mode.ordinal()]);
             option.setText(mode.label);
-            option.setTextSize(16);
-            option.setTextColor(INK);
-            option.setMinHeight(dp(48));
-            option.setMinimumHeight(dp(48));
-            option.setButtonTintList(ColorStateList.valueOf(BLUE));
             option.setChecked(mode == stagedMode);
-            option.setOnCheckedChangeListener((view, checked) -> { if (checked) stagedMode = mode; });
-            modes.addView(option, new android.widget.RadioGroup.LayoutParams(-1, -2));
+            ModernDialog.styleRadioOption(this, option);
+            option.setOnCheckedChangeListener((view, checked) -> {
+                if (checked) stagedMode = mode;
+                syncModes.run();
+            });
+            android.widget.RadioGroup.LayoutParams rp = new android.widget.RadioGroup.LayoutParams(-1, -2);
+            rp.topMargin = dp(8);
+            modes.addView(option, rp);
             modeButtons.add(option);
         }
         LinearLayout.LayoutParams modesParams = new LinearLayout.LayoutParams(-1, -2);
-        modesParams.topMargin = dp(4);
+        modesParams.topMargin = dp(2);
         content.addView(modes, modesParams);
         ScrollView formScroll = new ScrollView(this);
         formScroll.addView(content);
-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("배경 사진")
+        AlertDialog dialog = ModernDialog.builder(this, "배경 사진", "메인 화면의 배경과 표시 방식을 설정합니다.")
                 .setView(formScroll).setNegativeButton("취소", null)
                 .setPositiveButton("저장", null).create();
         backgroundDialog = dialog;
@@ -598,12 +525,16 @@ public final class MainActivity extends Activity {
                     : stagedRemove && current ? "저장하면 사진을 삭제하고 기본 배경으로 되돌립니다."
                     : current ? "현재 배경 사진을 사용 중입니다."
                     : "배경 사진이 없습니다. 기본 배경을 사용 중입니다.");
-            status.setTextColor(photoError != null ? Color.rgb(193, 60, 60) : MUTED);
+            status.setTextColor(photoError != null ? ModernDialog.DANGER : ModernDialog.BODY);
+            status.setBackground(ModernDialog.outlined(this,
+                    photoError != null ? ModernDialog.DANGER_SOFT : ModernDialog.SURFACE_MUTED,
+                    photoError != null ? Color.rgb(252, 165, 165) : ModernDialog.BORDER, 1f, 12));
             pick.setText(photo ? "사진 변경" : "사진 선택");
             pick.setEnabled(!busy);
             remove.setEnabled(!busy && photo);
-            remove.setAlpha(remove.isEnabled() ? 1f : 0.5f);
+            remove.setAlpha(remove.isEnabled() ? 1f : 0.45f);
             for (android.widget.RadioButton option : modeButtons) option.setEnabled(photo && !busy);
+            syncModes.run();
             Button save = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
             if (save != null) save.setEnabled(!busy);
         };
@@ -647,10 +578,12 @@ public final class MainActivity extends Activity {
             photoError = null;
         });
         dialog.setOnShowListener(ignored -> {
+            ModernDialog.styleButtons(dialog, false);
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> saveBackground(dialog));
             refresh.run();
         });
         dialog.show();
+        ModernDialog.applyChrome(dialog);
         if (preparingPhoto != null) startPhotoPrepare(preparingPhoto);
     }
 
@@ -748,7 +681,7 @@ public final class MainActivity extends Activity {
     }
 
     private Button button(String label, boolean primary) {
-        Button b = new HaloButton(this);
+        Button b = new Button(this);
         b.setAllCaps(false);
         b.setText(label);
         b.setTextSize(14);
@@ -820,11 +753,23 @@ public final class MainActivity extends Activity {
         names.setGravity(Gravity.CENTER_VERTICAL);
         names.setBackground(pressable(0x222563EB, Color.TRANSPARENT, 8));
         names.setFocusable(true);
-        names.setContentDescription("규칙 수정: " + rule.appName + " " + rule.phrase);
+        String ruleSummary = rule.matchEmpty ? "내용이 없는 알림 제거"
+                : rule.exact ? "정확히 일치: " + rule.phrase
+                : "포함 문구: " + rule.phrase;
+        names.setContentDescription("규칙 수정: " + rule.appName + " " + ruleSummary);
         names.setOnClickListener(v -> editRule.run());
-        TextView phrase = text("포함 문구: " + rule.phrase, 15, INK, false);
+        if (rule.matchEmpty || rule.exact) {
+            TextView badge = ModernDialog.badge(this,
+                    rule.matchEmpty ? "내용 없는 알림" : "정확히 일치",
+                    ModernDialog.SURFACE_TINT, ModernDialog.BLUE_DARK);
+            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
+            bp.bottomMargin = dp(4);
+            names.addView(badge, bp);
+        }
+        TextView phrase = text(rule.matchEmpty ? "제목·본문이 없는 알림 자동 제거"
+                : rule.exact ? rule.phrase : "포함 문구: " + rule.phrase, 15, INK, false);
         LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-1, -2);
-        pp.topMargin = dp(5);
+        pp.topMargin = dp(2);
         names.addView(phrase, pp);
         LinearLayout.LayoutParams namesParams = new LinearLayout.LayoutParams(0, -2, 1);
         namesParams.setMarginEnd(dp(8));
@@ -832,7 +777,7 @@ public final class MainActivity extends Activity {
         Switch enabled = toggleSwitch();
         enabled.setId(R.id.rule_enabled);
         enabled.setChecked(rule.enabled);
-        enabled.setContentDescription(rule.appName + " " + rule.phrase + " 규칙 활성화");
+        enabled.setContentDescription(rule.appName + " " + ruleSummary + " 규칙 활성화");
         row.addView(enabled);
         box.addView(row);
         enabled.setOnCheckedChangeListener((v, value) -> {
@@ -863,8 +808,13 @@ public final class MainActivity extends Activity {
 
     private void showDeleteRuleDialog(Rule rule) {
         if (deleteRuleDialog != null || isFinishing() || isDestroyed()) return;
-        AlertDialog confirmation = new AlertDialog.Builder(this)
-                .setMessage("이 규칙을 삭제하시겠습니까?")
+        String appLabel = rule.packageName.isEmpty() ? "모든 앱" : (rule.appName.isEmpty() ? rule.packageName : rule.appName);
+        String summary = rule.matchEmpty ? "내용이 없는 알림 제거"
+                : rule.exact ? "정확히 일치: " + rule.phrase
+                : "포함 문구: " + rule.phrase;
+        AlertDialog confirmation = ModernDialog.builder(this, "규칙 삭제", null)
+                .setView(ModernDialog.messageBody(this,
+                        "이 차단 규칙을 삭제하시겠습니까?\n\n대상 앱: " + appLabel + "\n조건: " + summary))
                 .setNegativeButton("취소", null)
                 .setPositiveButton("삭제", (dialog, which) -> {
                     if (deleteRuleDialog != dialog || isFinishing() || isDestroyed()) return;
@@ -878,7 +828,7 @@ public final class MainActivity extends Activity {
         confirmation.setOnDismissListener(dialog -> {
             if (deleteRuleDialog == confirmation) deleteRuleDialog = null;
         });
-        confirmation.show();
+        ModernDialog.show(confirmation, true);
     }
 
     private void showAddDialog() {
@@ -889,7 +839,9 @@ public final class MainActivity extends Activity {
         // Add and edit share one dialog owner, including rapid repeated taps.
         if (addRuleDialog != null || activeNotificationsDialog != null || isFinishing() || isDestroyed()) return;
         final boolean editing = original != null;
-        final boolean literal = editing && original.literal;
+        final boolean initialLiteral = editing && original.literal;
+        final boolean initialExact = editing && original.exact;
+        final boolean initialEmpty = editing && original.matchEmpty;
         List<AppOption> apps = installedApps();
         final AppOption[] selected = {apps.get(0)};
         if (editing && !original.packageName.isEmpty()) {
@@ -906,50 +858,125 @@ public final class MainActivity extends Activity {
         }
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(22), dp(12), dp(22), dp(12));
-        Button choose = button("대상 앱: " + selected[0].label + "  ▾", false);
+        content.setPadding(dp(24), dp(8), dp(24), dp(12));
+
+        content.addView(ModernDialog.sectionLabel(this, "대상 앱"), new LinearLayout.LayoutParams(-1, -2));
+        Button choose = new Button(this);
         choose.setId(R.id.rule_choose_app);
-        content.addView(choose, new LinearLayout.LayoutParams(-1, -2));
-        TextView loading=text("앱 목록 확인 중…",12,MUTED,false);
-        content.addView(loading);
+        choose.setText("대상 앱: " + selected[0].label + "  ▾");
+        ModernDialog.styleSelectorButton(this, choose);
+        LinearLayout.LayoutParams chooseParams = new LinearLayout.LayoutParams(-1, -2);
+        chooseParams.topMargin = dp(8);
+        content.addView(choose, chooseParams);
+
+        TextView loading = text("앱 목록 확인 중…", 12, ModernDialog.MUTED, false);
+        LinearLayout.LayoutParams loadParams = new LinearLayout.LayoutParams(-1, -2);
+        loadParams.topMargin = dp(6);
+        content.addView(loading, loadParams);
         choose.setOnClickListener(v -> showAppPicker(apps, option -> {
             selected[0] = option;
             choose.setText("대상 앱: " + option.label + "  ▾");
         }));
+
         LinearLayout phraseHeader = new LinearLayout(this);
         phraseHeader.setGravity(Gravity.CENTER_VERTICAL);
-        phraseHeader.addView(text(literal ? "포함 문구 · 알림 문구 그대로 비교" : "포함 문구 · ; 로 AND (모두 포함)", 14, MUTED, false),
-                new LinearLayout.LayoutParams(0, -2, 1));
-        TextView help = text("?", 19, MUTED, true);
+        TextView phraseLabel = ModernDialog.sectionLabel(this, "");
+        phraseHeader.addView(phraseLabel, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView help = text("?", 16, ModernDialog.BLUE_DARK, true);
         help.setGravity(Gravity.CENTER);
-        help.setMinHeight(dp(44));
-        help.setPadding(0, dp(8), 0, dp(8));
-        help.setBackground(shape(Color.rgb(235, 239, 245), 22));
-        help.setContentDescription("문구 조건 AND 도움말");
-        help.setOnClickListener(v -> {
-            if (literal) Toast.makeText(this, "알림에서 만든 규칙은 쉼표·세미콜론·줄바꿈도 문구 그대로 비교합니다. 영문 대소문자는 구분하지 않습니다.", Toast.LENGTH_LONG).show();
-            else showRuleHelp();
-        });
-        phraseHeader.addView(help, new LinearLayout.LayoutParams(dp(44), -2));
+        help.setMinWidth(dp(36));
+        help.setMinHeight(dp(36));
+        help.setBackground(ModernDialog.ripple(this, 0x222563EB, ModernDialog.SURFACE_TINT, 18));
+        help.setContentDescription("문구 조건 도움말");
+        phraseHeader.addView(help, new LinearLayout.LayoutParams(dp(36), dp(36)));
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1, -2);
-        hp.topMargin = dp(12);
+        hp.topMargin = dp(16);
         content.addView(phraseHeader, hp);
+
         EditText phrase = new EditText(this);
         phrase.setId(R.id.rule_phrase);
-        phrase.setSingleLine(!literal);
-        phrase.setHint("예: 택배;배송");
-        phrase.setTextSize(16);
-        if (editing) {
+        ModernDialog.styleInput(this, phrase);
+        phrase.setMinHeight(dp(54));
+        if (editing && !initialEmpty) {
             phrase.setText(original.phrase);
             phrase.setSelection(phrase.length());
         }
-        phrase.setMinHeight(dp(58));
         LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(-1, -2);
-        ep.topMargin = dp(12);
+        ep.topMargin = dp(8);
         content.addView(phrase, ep);
+
+        TextView optionsLabel = ModernDialog.sectionLabel(this, "매칭 옵션");
+        LinearLayout.LayoutParams opLabelParams = new LinearLayout.LayoutParams(-1, -2);
+        opLabelParams.topMargin = dp(16);
+        content.addView(optionsLabel, opLabelParams);
+
+        CheckBox exactCheck = new CheckBox(this);
+        exactCheck.setId(R.id.rule_exact);
+        exactCheck.setChecked(initialExact);
+        LinearLayout exactCard = ModernDialog.optionCard(this, exactCheck,
+                "정확히 같은 알람만 제거",
+                "알림 전체 내용이 입력한 문구와 정확히 일치할 때만 제거합니다.");
+        LinearLayout.LayoutParams exactParams = new LinearLayout.LayoutParams(-1, -2);
+        exactParams.topMargin = dp(8);
+        content.addView(exactCard, exactParams);
+
+        CheckBox emptyCheck = new CheckBox(this);
+        emptyCheck.setId(R.id.rule_match_empty);
+        emptyCheck.setChecked(initialEmpty);
+        LinearLayout emptyCard = ModernDialog.optionCard(this, emptyCheck,
+                "내용이 없는 알림 제거",
+                "제목과 본문이 모두 비어 있는 알림을 자동으로 제거합니다.");
+        LinearLayout.LayoutParams emptyParams = new LinearLayout.LayoutParams(-1, -2);
+        emptyParams.topMargin = dp(8);
+        content.addView(emptyCard, emptyParams);
+
+        Runnable syncForm = () -> {
+            boolean matchEmpty = emptyCheck.isChecked();
+            boolean exactMode = !matchEmpty && exactCheck.isChecked();
+            exactCheck.setEnabled(!matchEmpty);
+            phrase.setEnabled(!matchEmpty);
+            phrase.setAlpha(matchEmpty ? 0.55f : 1f);
+            if (matchEmpty) {
+                phrase.setError(null);
+                phrase.setHint("내용이 없는 알림을 자동으로 제거합니다");
+                phraseLabel.setText("알림 문구 · 내용 없음 조건 사용 중");
+            } else if (exactMode) {
+                phrase.setSingleLine(false);
+                phrase.setMaxLines(4);
+                phrase.setHint("예: 정확히 일치할 알림 전체 문구");
+                phraseLabel.setText("일치 문구 · 알림 전체 내용과 정확히 비교");
+            } else if (initialLiteral) {
+                phrase.setSingleLine(false);
+                phrase.setMaxLines(4);
+                phrase.setHint("알림 문구 그대로 입력");
+                phraseLabel.setText("포함 문구 · 알림 문구 그대로 비교");
+            } else {
+                phrase.setSingleLine(true);
+                phrase.setHint("예: 택배;배송");
+                phraseLabel.setText("포함 문구 · ; 로 AND (모두 포함)");
+            }
+            ModernDialog.updateOptionCard(this, exactCard, exactCheck);
+            ModernDialog.updateOptionCard(this, emptyCard, emptyCheck);
+        };
+        exactCheck.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            phrase.setError(null);
+            syncForm.run();
+        });
+        emptyCheck.setOnCheckedChangeListener((buttonView, isChecked) -> syncForm.run());
+        help.setOnClickListener(v -> {
+            if (initialLiteral && !exactCheck.isChecked() && !emptyCheck.isChecked()) {
+                Toast.makeText(this, "알림에서 만든 규칙은 쉼표·세미콜론·줄바꿈도 문구 그대로 비교합니다. 영문 대소문자는 구분하지 않습니다.", Toast.LENGTH_LONG).show();
+            } else {
+                showRuleHelp();
+            }
+        });
+        syncForm.run();
+
         ScrollView formScroll = new ScrollView(this);
         formScroll.addView(content);
-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle(editing ? "차단 규칙 수정" : "차단 규칙 추가")
+        AlertDialog dialog = ModernDialog.builder(this,
+                        editing ? "차단 규칙 수정" : "차단 규칙 추가",
+                        "선택한 앱에서 조건에 맞는 알림을 자동으로 숨깁니다.")
                 .setView(formScroll).setNegativeButton("취소", null)
                 .setPositiveButton(editing ? "저장" : "추가", null).create();
         addRuleDialog = dialog;
@@ -980,51 +1007,60 @@ public final class MainActivity extends Activity {
                 if (activeNotificationsButton != null) activeNotificationsButton.setEnabled(true);
             }
         });
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            // A queued second positive click after dismissal must not save twice.
-            if (addRuleDialog != dialog || !dialog.isShowing()) return;
-            String value = phrase.getText().toString().trim();
-            if (TextUtils.isEmpty(value)) {
-                phrase.setError("문구를 입력해 주세요");
-                return;
-            }
-            if (!literal && !RuleMatcher.isValidExpression(value)) {
-                phrase.setError("세미콜론(;) 앞뒤에 문구를 입력해 주세요. 빈 조건은 사용할 수 없습니다.");
-                return;
-            }
-            List<Rule> rules = store.load();
-            Rule savedRule;
-            if (editing) {
-                int index = -1;
-                for (int i = 0; i < rules.size(); i++) {
-                    if (rules.get(i).id == original.id) { index = i; break; }
+        dialog.setOnShowListener(ignored -> {
+            ModernDialog.styleButtons(dialog, false);
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                // A queued second positive click after dismissal must not save twice.
+                if (addRuleDialog != dialog || !dialog.isShowing()) return;
+                boolean matchEmpty = emptyCheck.isChecked();
+                boolean exactMode = !matchEmpty && exactCheck.isChecked();
+                boolean literalMode = !matchEmpty && !exactMode && initialLiteral;
+                String value = matchEmpty ? "" : phrase.getText().toString().trim();
+                if (!matchEmpty) {
+                    if (TextUtils.isEmpty(value)) {
+                        phrase.setError("문구를 입력해 주세요");
+                        return;
+                    }
+                    if (!exactMode && !literalMode && !RuleMatcher.isValidExpression(value)) {
+                        phrase.setError("세미콜론(;) 앞뒤에 문구를 입력해 주세요. 빈 조건은 사용할 수 없습니다.");
+                        return;
+                    }
                 }
-                if (index < 0) {
-                    dialog.dismiss();
-                    Toast.makeText(this, "규칙이 없어 수정할 수 없습니다", Toast.LENGTH_LONG).show();
-                    render();
-                    return;
+                List<Rule> rules = store.load();
+                Rule savedRule;
+                if (editing) {
+                    int index = -1;
+                    for (int i = 0; i < rules.size(); i++) {
+                        if (rules.get(i).id == original.id) { index = i; break; }
+                    }
+                    if (index < 0) {
+                        dialog.dismiss();
+                        Toast.makeText(this, "규칙이 없어 수정할 수 없습니다", Toast.LENGTH_LONG).show();
+                        render();
+                        return;
+                    }
+                    savedRule = new Rule(original.id, selected[0].packageName, selected[0].label,
+                            value, rules.get(index).enabled, literalMode, exactMode, matchEmpty);
+                    rules.set(index, savedRule);
+                } else {
+                    savedRule = new Rule(System.currentTimeMillis(), selected[0].packageName,
+                            selected[0].label, value, true, false, exactMode, matchEmpty);
+                    rules.add(savedRule);
                 }
-                savedRule = new Rule(original.id, selected[0].packageName, selected[0].label,
-                        value, rules.get(index).enabled, literal);
-                rules.set(index, savedRule);
-            } else {
-                savedRule = new Rule(System.currentTimeMillis(), selected[0].packageName,
-                        selected[0].label, value, true);
-                rules.add(savedRule);
-            }
-            store.save(rules);
-            dialog.dismiss();
-            int existing = savedRule.enabled ? FilterService.clearExistingForNewRule(savedRule) : 0;
-            expandedApps.add(savedRule.packageName);
-            String result = editing ? "규칙 수정됨" : "규칙 추가됨";
-            String message = !savedRule.enabled ? result + " · 비활성 상태 유지"
-                    : existing < 0 ? result + " · 기존 알림 확인에는 알림 접근이 필요합니다"
-                    : result + " · 기존 알림 " + existing + "개 숨김 요청";
-            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
-            render();
-        }));
+                store.save(rules);
+                dialog.dismiss();
+                int existing = savedRule.enabled ? FilterService.clearExistingForNewRule(savedRule) : 0;
+                expandedApps.add(savedRule.packageName);
+                String result = editing ? "규칙 수정됨" : "규칙 추가됨";
+                String message = !savedRule.enabled ? result + " · 비활성 상태 유지"
+                        : existing < 0 ? result + " · 기존 알림 확인에는 알림 접근이 필요합니다"
+                        : result + " · 기존 알림 " + existing + "개 숨김 요청";
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+                render();
+            });
+        });
         dialog.show();
+        ModernDialog.applyChrome(dialog);
         // Show the form before querying packages or reading the on-disk label cache.
         catalog.subscribe(listener);
     }
@@ -1041,13 +1077,25 @@ public final class MainActivity extends Activity {
             }
         };
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(16), dp(8), dp(16), 0);
-        TextView status = text("현재 알림 확인 중…", 14, MUTED, false);
+        content.setPadding(dp(20), dp(4), dp(20), 0);
+
+        CheckBox exactCheck = new CheckBox(this);
+        exactCheck.setId(R.id.active_notification_exact);
+        LinearLayout exactCard = ModernDialog.optionCard(this, exactCheck,
+                "정확히 같은 알람만 제거",
+                "선택한 알림과 전체 내용이 정확히 일치할 때만 제거합니다.");
+        exactCheck.setOnCheckedChangeListener((buttonView, isChecked) ->
+                ModernDialog.updateOptionCard(this, exactCard, exactCheck));
+        content.addView(exactCard, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView status = text("현재 알림 확인 중…", 13, ModernDialog.MUTED, false);
         status.setId(R.id.active_notification_status);
-        status.setPadding(0, dp(8), 0, dp(12));
+        status.setPadding(dp(4), dp(10), dp(4), dp(10));
         content.addView(status, new LinearLayout.LayoutParams(-1, -2));
+
         ListView list = new ListView(this);
         list.setId(R.id.active_notification_list);
+        ModernDialog.styleListView(this, list, 8);
         content.addView(list, new LinearLayout.LayoutParams(-1, 0, 1));
         List<FilterService.ActiveNotification> items = new ArrayList<>();
         BaseAdapter adapter = new BaseAdapter() {
@@ -1061,19 +1109,31 @@ public final class MainActivity extends Activity {
                 LinearLayout row = new LinearLayout(MainActivity.this);
                 row.setOrientation(LinearLayout.VERTICAL);
                 row.setMinimumHeight(dp(64));
-                row.setPadding(dp(8), dp(14), dp(8), dp(14));
-                row.addView(text(item.appName, 16, INK, true), new LinearLayout.LayoutParams(-1, -2));
-                row.addView(text(item.packageName, 12, MUTED, false), new LinearLayout.LayoutParams(-1, -2));
-                TextView body = text(!item.canCreateRule() ? "문구가 없어 규칙을 만들 수 없는 알림입니다." : item.text,
-                        14, MUTED, false);
-                body.setPadding(0, dp(6), 0, 0);
-                row.addView(body, new LinearLayout.LayoutParams(-1, -2));
+                row.setPadding(dp(14), dp(12), dp(14), dp(12));
+                row.setBackground(ModernDialog.outlinedRipple(MainActivity.this,
+                        0x1A2563EB, ModernDialog.SURFACE_MUTED, ModernDialog.BORDER, 1f, 14));
+                row.addView(text(item.appName, 15, ModernDialog.INK, true), new LinearLayout.LayoutParams(-1, -2));
+                TextView pkgView = text(item.packageName, 11, ModernDialog.HINT, false);
+                row.addView(pkgView, new LinearLayout.LayoutParams(-1, -2));
+                if (item.isEmptyContent()) {
+                    TextView emptyChip = ModernDialog.badge(MainActivity.this,
+                            "내용 없음 · 빈 알림 제거 규칙으로 추가",
+                            ModernDialog.SURFACE_TINT, ModernDialog.BLUE_DARK);
+                    LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-2, -2);
+                    cp.topMargin = dp(8);
+                    row.addView(emptyChip, cp);
+                } else {
+                    TextView body = text(item.text, 13, ModernDialog.BODY, false);
+                    body.setPadding(0, dp(6), 0, 0);
+                    row.addView(body, new LinearLayout.LayoutParams(-1, -2));
+                }
                 row.setAlpha(item.canCreateRule() ? 1f : 0.6f);
                 return row;
             }
         };
         list.setAdapter(adapter);
-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("현재 알림 선택")
+        AlertDialog dialog = ModernDialog.builder(this, "현재 알림 선택",
+                        "알림을 누르면 규칙 저장 후 바로 1회 적용합니다.")
                 .setView(content).setNegativeButton("닫기", null)
                 .setPositiveButton("새로고침", null).create();
         activeNotificationsDialog = dialog;
@@ -1094,7 +1154,8 @@ public final class MainActivity extends Activity {
             items.clear(); adapter.notifyDataSetChanged(); list.setEnabled(false);
             status.setText("현재 알림 확인 중…");
             status.setOnClickListener(null);
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
+            Button refreshBtn = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            if (refreshBtn != null) refreshBtn.setEnabled(false);
             notificationLoader.execute(() -> {
                 List<FilterService.ActiveNotification> result;
                 try { result = FilterService.activeNotifications(); }
@@ -1103,7 +1164,8 @@ public final class MainActivity extends Activity {
                 runOnUiThread(() -> {
                     if (isFinishing() || isDestroyed() || activeNotificationsDialog != dialog
                             || !dialog.isShowing() || request != activeNotificationsRequest) return;
-                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
+                    Button btn = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+                    if (btn != null) btn.setEnabled(true);
                     if (snapshot == null) {
                         status.setText("알림을 읽을 수 없습니다. 여기를 눌러 설정에서 알림 접근을 허용한 뒤 다시 시도해 주세요.");
                         status.setOnClickListener(v -> {
@@ -1113,7 +1175,7 @@ public final class MainActivity extends Activity {
                     } else {
                         items.addAll(snapshot); adapter.notifyDataSetChanged(); list.setEnabled(true);
                         status.setText(items.isEmpty() ? "읽을 수 있는 알림이 없습니다. 보안폴더 알림이 없다면 보안폴더의 알림 설정을 확인해 주세요."
-                                : "선택하면 규칙 저장 후 1회 적용합니다. 일시정지는 유지됩니다. 내용 숨김 알림은 ‘내용 숨김 표시’를 선택하세요.");
+                                : "일시정지는 유지됩니다. 내용이 없는 알림도 선택해 제거 규칙으로 추가할 수 있습니다.");
                     }
                 });
             });
@@ -1126,7 +1188,14 @@ public final class MainActivity extends Activity {
             List<Rule> rules = store.load();
             long nextId = System.currentTimeMillis();
             for (Rule rule : rules) if (rule.id >= nextId) nextId = rule.id + 1;
-            Rule saved = new Rule(nextId, item.packageName, item.appName, item.text, true, true);
+            Rule saved;
+            if (item.isEmptyContent()) {
+                saved = new Rule(nextId, item.packageName, item.appName, "", true, false, false, true);
+            } else {
+                boolean exactOnly = exactCheck.isChecked();
+                saved = new Rule(nextId, item.packageName, item.appName, item.text,
+                        true, !exactOnly, exactOnly, false);
+            }
             rules.add(saved);
             store.save(rules);
             expandedApps.add(saved.packageName);
@@ -1138,8 +1207,12 @@ public final class MainActivity extends Activity {
             if (store.isPaused()) message += " · 일시정지 유지";
             Toast.makeText(this, message, Toast.LENGTH_LONG).show();
         });
+        dialog.setOnShowListener(ignored -> {
+            ModernDialog.styleButtons(dialog, false);
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> refresh.run());
+        });
         dialog.show();
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> refresh.run());
+        ModernDialog.applyChrome(dialog);
         dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
         View decor = dialog.getWindow().getDecorView();
         decor.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
@@ -1154,27 +1227,26 @@ public final class MainActivity extends Activity {
 
     private void showRuleHelp() {
         if (ruleHelpDialog != null || isFinishing() || isDestroyed()) return;
-        AlertDialog help = new AlertDialog.Builder(this)
-                .setTitle("문구 조건 사용법")
-                .setMessage("알림의 제목·본문 등에서 문구 포함 여부를 검사합니다.\n\n"
-                        + "세미콜론 ; = AND (모두 포함)\n"
-                        + "예: 택배;배송 → ‘택배’와 ‘배송’이 모두 있어야 차단합니다.\n"
-                        + "단어 순서는 상관없으며 같은 알림 안에 포함되면 됩니다.\n\n"
-                        + "OR(하나만 포함) 조건은 지원하지 않습니다. "
-                        + "여러 문구 중 하나만 있어도 차단하려면 문구마다 규칙을 따로 추가해 주세요.\n\n"
-                        + "문구 앞뒤 공백은 무시하고 영문 대소문자는 구분하지 않습니다. "
-                        + "문구 안의 띄어쓰기와 쉼표(,)는 그대로 비교합니다.\n"
-                        + "빈 조건(예: 광고;;이벤트 / 광고;)은 저장할 수 없습니다.\n"
-                        + "반각 ; 만 구분자입니다. 괄호·정규식·세미콜론 자체 검색은 지원하지 않습니다.\n\n"
-                        + "이전 버전 규칙은 업데이트 시 한 번 자동 변환됩니다. "
-                        + "쉼표(,) AND는 ;로 바뀌고, ; OR로 묶인 조건은 각각 별도 규칙으로 나뉘어 "
-                        + "이전과 같은 알림을 차단합니다.")
+        String guide = "알림의 제목·본문 등에서 문구 일치 여부를 검사합니다.\n\n"
+                + "• 기본 포함 문구 (; = AND)\n"
+                + "예: 택배;배송 → ‘택배’와 ‘배송’이 모두 포함되면 차단합니다. 단어 순서는 상관없습니다.\n"
+                + "OR 조건은 지원하지 않으므로, 하나만 있어도 차단하려면 규칙을 따로 추가해 주세요.\n\n"
+                + "• 정확히 같은 알람만 제거\n"
+                + "알림의 전체 내용(제목·본문)이 입력한 문구와 정확히 일치할 때만 제거합니다. "
+                + "세미콜론(;)도 기호 그대로 비교합니다.\n\n"
+                + "• 내용이 없는 알림 제거\n"
+                + "제목과 본문이 모두 비어 있는 알림을 자동으로 제거합니다.\n\n"
+                + "• 공통 안내\n"
+                + "문구 앞뒤 공백은 무시하고 영문 대소문자는 구분하지 않습니다. "
+                + "문구 안의 띄어쓰기와 쉼표(,)는 그대로 비교합니다.";
+        AlertDialog help = ModernDialog.builder(this, "문구 조건 사용법", null)
+                .setView(ModernDialog.messageBody(this, guide))
                 .setPositiveButton("확인", null).create();
         ruleHelpDialog = help;
         help.setOnDismissListener(ignored -> {
             if (ruleHelpDialog == help) ruleHelpDialog = null;
         });
-        help.show();
+        ModernDialog.show(help, false);
     }
 
     private interface AppSelection { void select(AppOption option); }
@@ -1188,23 +1260,27 @@ public final class MainActivity extends Activity {
         if (appPickerDialog != null || addRuleDialog == null || isFinishing() || isDestroyed()) return;
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(dp(12), dp(4), dp(12), 0);
+        layout.setPadding(dp(20), dp(4), dp(20), 0);
 
         EditText search = new EditText(this);
         search.setId(R.id.app_search);
         search.setSingleLine(true);
         search.setHint("앱 이름 또는 패키지 검색");
-        search.setTextSize(16);
-        search.setMinHeight(dp(52));
+        ModernDialog.styleInput(this, search);
+        search.setMinHeight(dp(50));
         layout.addView(search, new LinearLayout.LayoutParams(-1, -2));
         pickerSearch=search;
-        pickerStatus=text("",12,MUTED,false);
+        pickerStatus=text("",12,ModernDialog.BLUE_DARK,true);
         pickerStatus.setId(R.id.app_load_status);
-        pickerStatus.setPadding(dp(8),dp(8),dp(8),dp(8));
+        pickerStatus.setPadding(dp(12),dp(7),dp(12),dp(7));
+        pickerStatus.setBackground(ModernDialog.ripple(this, 0x222563EB, ModernDialog.SURFACE_TINT, 10));
         pickerStatus.setOnClickListener(v->catalog.refresh());
-        layout.addView(pickerStatus);updatePickerStatus();
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(-2, -2);
+        statusParams.topMargin = dp(8);
+        layout.addView(pickerStatus, statusParams);updatePickerStatus();
 
         ListView list = new ListView(this);
+        ModernDialog.styleListView(this, list, 6);
         AppAdapter adapter = new AppAdapter(apps);
         pickerAdapter=adapter;
         list.setAdapter(adapter);
@@ -1212,8 +1288,7 @@ public final class MainActivity extends Activity {
         listParams.topMargin = dp(8);
         layout.addView(list, listParams);
 
-        AlertDialog picker = new AlertDialog.Builder(this)
-                .setTitle("대상 앱 선택")
+        AlertDialog picker = ModernDialog.builder(this, "대상 앱 선택", "규칙을 적용할 앱을 선택하세요.")
                 .setView(layout)
                 .setNegativeButton("취소", null)
                 .create();
@@ -1234,7 +1309,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void afterTextChanged(Editable s) {}
         });
-        picker.show();
+        ModernDialog.show(picker, false);
         catalog.refresh();
         picker.getWindow().setSoftInputMode(
                 android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
@@ -1305,7 +1380,9 @@ public final class MainActivity extends Activity {
             AppOption item = getItem(position);
             LinearLayout row = new LinearLayout(MainActivity.this);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(dp(12), dp(9), dp(12), dp(9));
+            row.setPadding(dp(12), dp(10), dp(12), dp(10));
+            row.setBackground(ModernDialog.outlinedRipple(MainActivity.this,
+                    0x1A2563EB, ModernDialog.SURFACE_MUTED, ModernDialog.BORDER, 1f, 14));
             ImageView image = new ImageView(MainActivity.this);
             Drawable cached=item.packageName.isEmpty()?null:catalog.cachedIcon(item.packageName);
             image.setImageDrawable(item.icon!=null?item.icon:cached!=null?cached:getDrawable(R.drawable.app_icon));
@@ -1314,13 +1391,13 @@ public final class MainActivity extends Activity {
                 if(item.packageName.equals(image.getTag()) && image.isAttachedToWindow())image.setImageDrawable(icon);
             });
             image.setContentDescription(item.label + " 아이콘");
-            row.addView(image, new LinearLayout.LayoutParams(dp(40), dp(40)));
+            row.addView(image, new LinearLayout.LayoutParams(dp(38), dp(38)));
             LinearLayout labels = new LinearLayout(MainActivity.this);
             labels.setOrientation(LinearLayout.VERTICAL);
-            labels.addView(text(item.label, 16, INK, false));
-            if (!item.packageName.isEmpty()) labels.addView(text(item.packageName, 11, MUTED, false));
+            labels.addView(text(item.label, 15, ModernDialog.INK, true));
+            if (!item.packageName.isEmpty()) labels.addView(text(item.packageName, 11, ModernDialog.MUTED, false));
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-            lp.leftMargin = dp(14);
+            lp.leftMargin = dp(12);
             row.addView(labels, lp);
             return row;
         }

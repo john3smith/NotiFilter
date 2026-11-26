@@ -40,20 +40,30 @@ public final class HistoryActivity extends Activity {
         root.setBackgroundColor(Color.rgb(247, 249, 252));
         LinearLayout header = new AdaptiveRow(this, false);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = label("알림 처리 이력", 23, true);
+        TextView title = label("알림 처리 이력", 24, true);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
-        Button refresh = new Button(this); refresh.setText("새로고침");
-        header.addView(refresh); root.addView(header);
+        Button refresh = actionButton("새로고침", false, false);
+        header.addView(refresh, new LinearLayout.LayoutParams(-2, -2)); root.addView(header);
         refresh.setOnClickListener(v -> refresh());
-        status = label("불러오는 중…", 13, false); root.addView(status);
-        root.addView(label("처리 확인 시간 · 최근 1,000개 · 이전 버전 기록 포함", 12, false));
-        Button clear = new Button(this); clear.setText("저장된 이력 모두 삭제");
-        root.addView(clear);
+        status = label("불러오는 중…", 13, false);
+        status.setTextColor(ModernDialog.MUTED);
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(-1, -2);
+        statusParams.topMargin = dp(8);
+        root.addView(status, statusParams);
+        TextView meta = label("처리 확인 시간 · 최근 1,000개 · 이전 버전 기록 포함", 12, false);
+        meta.setTextColor(ModernDialog.MUTED);
+        LinearLayout.LayoutParams metaParams = new LinearLayout.LayoutParams(-1, -2);
+        metaParams.topMargin = dp(2);
+        root.addView(meta, metaParams);
+        Button clear = actionButton("저장된 이력 모두 삭제", false, true);
+        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(-1, -2);
+        clearParams.topMargin = dp(12); clearParams.bottomMargin = dp(10);
+        root.addView(clear, clearParams);
         clear.setOnClickListener(v -> {
             if (isFinishing() || isDestroyed() || clearDialog != null) return;
-            clearDialog = new AlertDialog.Builder(this)
-                .setTitle("저장된 알림 이력을 삭제할까요?")
-                .setMessage("기기 내부에 보관된 알림 내용과 아이콘을 삭제합니다. 필터 규칙은 유지되며 새로 숨긴 알림은 다시 기록될 수 있습니다.")
+            clearDialog = ModernDialog.builder(this, "저장된 알림 이력을 삭제할까요?", null)
+                .setView(ModernDialog.messageBody(this,
+                        "기기 내부에 보관된 알림 내용과 아이콘을 삭제합니다. 필터 규칙은 유지되며 새로 숨긴 알림은 다시 기록될 수 있습니다."))
                 .setNegativeButton("취소", null)
                 .setPositiveButton("삭제", (dialog, which) -> {
                     clear.setEnabled(false);
@@ -67,13 +77,16 @@ public final class HistoryActivity extends Activity {
                     });
                 }).create();
             clearDialog.setOnDismissListener(dialog -> clearDialog = null);
-            clearDialog.show();
+            ModernDialog.show(clearDialog, true);
         });
         ListView list = new ListView(this);
+        ModernDialog.styleListView(this, list, 10);
         list.setAdapter(adapter);
         root.addView(list, new LinearLayout.LayoutParams(-1, 0, 1));
-        Button back = new Button(this); back.setText("메인화면으로 돌아가기");
-        back.setOnClickListener(v -> finish()); root.addView(back);
+        Button back = actionButton("메인화면으로 돌아가기", true, false);
+        LinearLayout.LayoutParams backParams = new LinearLayout.LayoutParams(-1, -2);
+        backParams.topMargin = dp(10);
+        back.setOnClickListener(v -> finish()); root.addView(back, backParams);
         setContentView(root);
     }
     @Override public void onResume() { super.onResume(); refresh(); }
@@ -96,9 +109,36 @@ public final class HistoryActivity extends Activity {
             if (!isFinishing() && !isDestroyed() && current == requestId) status.setText("이력을 불러오지 못했습니다. 다시 시도해 주세요.");
         });
     }
+    private Button actionButton(String text, boolean primary, boolean destructive) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setAllCaps(false);
+        b.setTextSize(14);
+        b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        b.setGravity(Gravity.CENTER);
+        b.setMinWidth(0);
+        b.setMinimumWidth(0);
+        b.setMinHeight(dp(46));
+        b.setMinimumHeight(dp(46));
+        b.setPadding(dp(16), dp(10), dp(16), dp(10));
+        b.setStateListAnimator(null);
+        b.setElevation(0);
+        b.setTranslationZ(0);
+        if (primary) {
+            b.setTextColor(Color.WHITE);
+            b.setBackground(ModernDialog.ripple(this, 0x33FFFFFF, ModernDialog.BLUE, 12));
+        } else if (destructive) {
+            b.setTextColor(ModernDialog.DANGER);
+            b.setBackground(ModernDialog.ripple(this, 0x22DC2626, ModernDialog.DANGER_SOFT, 12));
+        } else {
+            b.setTextColor(ModernDialog.BLUE_DARK);
+            b.setBackground(ModernDialog.ripple(this, 0x222563EB, ModernDialog.SURFACE_TINT, 12));
+        }
+        return b;
+    }
     private TextView label(String value, int size, boolean bold) {
         TextView t = new TextView(this); t.setText(value); t.setTextSize(size);
-        t.setTextColor(Color.rgb(28, 39, 58));
+        t.setTextColor(ModernDialog.INK);
         if (bold) t.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return t;
     }
@@ -110,17 +150,24 @@ public final class HistoryActivity extends Activity {
         @Override public View getView(int position, View reusable, ViewGroup parent) {
             HistoryStore.Entry item = getItem(position);
             LinearLayout row = new LinearLayout(HistoryActivity.this);
-            row.setPadding(dp(8), dp(14), dp(8), dp(14));
+            row.setPadding(dp(14), dp(14), dp(14), dp(14));
+            row.setBackground(ModernDialog.outlined(HistoryActivity.this,
+                    ModernDialog.SURFACE, ModernDialog.BORDER, 1f, 16));
             ImageView icon = new ImageView(HistoryActivity.this);
             if (item.icon != null) icon.setImageBitmap(item.icon); else icon.setImageResource(R.drawable.app_icon);
             icon.setContentDescription(item.app + " 아이콘");
             row.addView(icon, new LinearLayout.LayoutParams(dp(42), dp(42)));
             LinearLayout content = new LinearLayout(HistoryActivity.this);
             content.setOrientation(LinearLayout.VERTICAL);
-            content.addView(label(item.app, 16, true));
-            content.addView(label(format.format(new Date(item.time)), 13, false));
-            content.addView(label(item.pkg, 11, false));
-            TextView body = label(item.content.isEmpty() ? "(내용 없음)" : item.content, 15, false);
+            content.addView(label(item.app, 15, true));
+            TextView time = label(format.format(new Date(item.time)), 12, false);
+            time.setTextColor(ModernDialog.MUTED);
+            content.addView(time);
+            TextView pkg = label(item.pkg, 11, false);
+            pkg.setTextColor(ModernDialog.HINT);
+            content.addView(pkg);
+            TextView body = label(item.content.isEmpty() ? "(내용 없음)" : item.content, 14, false);
+            body.setTextColor(item.content.isEmpty() ? ModernDialog.MUTED : ModernDialog.BODY);
             body.setTextIsSelectable(true); body.setPadding(0, dp(6), 0, 0); content.addView(body);
             LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0, -2, 1); cp.leftMargin = dp(12);
             row.addView(content, cp);

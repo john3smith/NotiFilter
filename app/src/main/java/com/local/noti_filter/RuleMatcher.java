@@ -10,7 +10,8 @@ public final class RuleMatcher {
         if (rules == null || sourcePackage == null || notificationText == null) return false;
         String haystack = notificationText.toLowerCase(Locale.ROOT);
         for (Rule rule : rules) {
-            if (!rule.enabled || rule.phrase.isEmpty()) continue;
+            if (!rule.enabled) continue;
+            if (!rule.matchEmpty && rule.phrase.isEmpty()) continue;
             if (!rule.packageName.isEmpty() && !rule.packageName.equals(sourcePackage)) continue;
             if (rule.matchesNormalized(haystack)) return true;
         }
