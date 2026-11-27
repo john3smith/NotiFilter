@@ -753,7 +753,7 @@ public final class MainActivity extends Activity {
         names.setGravity(Gravity.CENTER_VERTICAL);
         names.setBackground(pressable(0x222563EB, Color.TRANSPARENT, 8));
         names.setFocusable(true);
-        String ruleSummary = rule.notificationKey != null ? "문구 없는 동일 알림"
+        String ruleSummary = rule.matchBlank ? blankRuleLabel(rule)
                 : rule.exact ? "정확히 일치: " + rule.phrase : "포함 문구: " + rule.phrase;
         names.setContentDescription("규칙 수정: " + rule.appName + " " + ruleSummary);
         names.setOnClickListener(v -> editRule.run());
@@ -764,7 +764,7 @@ public final class MainActivity extends Activity {
             bp.bottomMargin = dp(4);
             names.addView(badge, bp);
         }
-        TextView phrase = text(rule.exact && rule.notificationKey == null ? rule.phrase : ruleSummary,
+        TextView phrase = text(rule.exact && !rule.matchBlank ? rule.phrase : ruleSummary,
                 15, INK, false);
         LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-1, -2);
         pp.topMargin = dp(2);
@@ -807,7 +807,7 @@ public final class MainActivity extends Activity {
     private void showDeleteRuleDialog(Rule rule) {
         if (deleteRuleDialog != null || isFinishing() || isDestroyed()) return;
         String appLabel = rule.packageName.isEmpty() ? "모든 앱" : (rule.appName.isEmpty() ? rule.packageName : rule.appName);
-        String summary = rule.notificationKey != null ? "문구 없는 동일 알림"
+        String summary = rule.matchBlank ? blankRuleLabel(rule)
                 : rule.exact ? "정확히 일치: " + rule.phrase : "포함 문구: " + rule.phrase;
         AlertDialog confirmation = ModernDialog.builder(this, "규칙 삭제", null)
                 .setView(ModernDialog.messageBody(this,
@@ -900,6 +900,13 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(-1, -2);
         ep.topMargin = dp(8);
         content.addView(phrase, ep);
+        TextView blankHelp = text(editing && original.notificationKey != null
+                        ? "문구를 비워 두면 문구 없는 동일 알림 규칙을 유지합니다."
+                        : "문구를 비워 두면 대상 앱의 문구 없는 알림만 제거합니다.",
+                12, ModernDialog.MUTED, false);
+        LinearLayout.LayoutParams blankHelpParams = new LinearLayout.LayoutParams(-1, -2);
+        blankHelpParams.topMargin = dp(6);
+        content.addView(blankHelp, blankHelpParams);
 
         TextView optionsLabel = ModernDialog.sectionLabel(this, "매칭 옵션");
         LinearLayout.LayoutParams opLabelParams = new LinearLayout.LayoutParams(-1, -2);
@@ -921,7 +928,7 @@ public final class MainActivity extends Activity {
             if (exactMode) {
                 phrase.setSingleLine(false);
                 phrase.setMaxLines(4);
-                phrase.setHint(editing && original.notificationKey != null ? "문구 없는 동일 알림"
+                phrase.setHint(editing && original.matchBlank ? blankRuleLabel(original)
                         : "예: 정확히 일치할 알림 전체 문구");
                 phraseLabel.setText("일치 문구 · 알림 전체 내용과 정확히 비교");
             } else if (initialLiteral) {
@@ -989,13 +996,15 @@ public final class MainActivity extends Activity {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
                 // A queued second positive click after dismissal must not save twice.
                 if (addRuleDialog != dialog || !dialog.isShowing()) return;
+                String value = phrase.getText().toString().trim();
+                boolean blank = RuleExpression.isBlank(value);
+                if (blank) exactCheck.setChecked(true);
                 boolean exactMode = exactCheck.isChecked();
                 boolean literalMode = !exactMode && initialLiteral;
-                String value = phrase.getText().toString().trim();
-                String notificationKey = editing && exactMode && RuleExpression.isBlank(value)
+                String notificationKey = editing && blank
                         && original.packageName.equals(selected[0].packageName) ? original.notificationKey : null;
-                if (RuleExpression.isBlank(value) && notificationKey == null) {
-                    phrase.setError("문구를 입력해 주세요");
+                if (blank && editing && original.notificationKey != null && notificationKey == null) {
+                    phrase.setError("대상 앱을 바꾸려면 문구를 입력해 주세요");
                     return;
                 }
                 if (!exactMode && !literalMode && !RuleMatcher.isValidExpression(value)) {
@@ -1016,12 +1025,12 @@ public final class MainActivity extends Activity {
                         return;
                     }
                     savedRule = new Rule(original.id, selected[0].packageName, selected[0].label,
-                            notificationKey == null ? value : "", rules.get(index).enabled,
-                            literalMode, exactMode, notificationKey);
+                            blank ? "" : value, rules.get(index).enabled,
+                            literalMode, exactMode, notificationKey, blank);
                     rules.set(index, savedRule);
                 } else {
                     savedRule = new Rule(System.currentTimeMillis(), selected[0].packageName,
-                            selected[0].label, value, true, false, exactMode);
+                            selected[0].label, blank ? "" : value, true, false, exactMode, null, blank);
                     rules.add(savedRule);
                 }
                 store.save(rules);
@@ -1040,6 +1049,10 @@ public final class MainActivity extends Activity {
         ModernDialog.applyChrome(dialog);
         // Show the form before querying packages or reading the on-disk label cache.
         catalog.subscribe(listener);
+    }
+
+    private static String blankRuleLabel(Rule rule) {
+        return rule.notificationKey == null ? "문구 없는 알림" : "문구 없는 동일 알림";
     }
 
     private void showActiveNotifications() {

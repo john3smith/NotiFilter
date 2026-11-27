@@ -195,11 +195,8 @@ public final class FilterService extends NotificationListenerService {
                     ? visible : null;
         }
         if (!visibleBlank) return RuleMatcher.matches(rules, sourcePackage, visible) ? visible : null;
-        if (notificationKey != null) {
-            for (Rule rule : rules) {
-                if (rule.enabled && rule.packageName.equals(sourcePackage)
-                        && notificationKey.equals(rule.notificationKey)) return "";
-            }
+        for (Rule rule : rules) {
+            if (rule.matchesBlankNotification(sourcePackage, notificationKey)) return "";
         }
         return null;
     }
