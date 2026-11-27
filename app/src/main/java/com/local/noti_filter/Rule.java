@@ -10,6 +10,7 @@ public final class Rule {
     public final boolean enabled;
     public final boolean literal;
     public final boolean exact;
+    final String notificationKey;
     // Bound to this immutable rule's lifetime, independent of shared-cache eviction.
     private volatile RuleExpression compiledExpression;
 
@@ -23,6 +24,11 @@ public final class Rule {
 
     public Rule(long id, String packageName, String appName, String phrase, boolean enabled,
                 boolean literal, boolean exact) {
+        this(id, packageName, appName, phrase, enabled, literal, exact, null);
+    }
+
+    Rule(long id, String packageName, String appName, String phrase, boolean enabled,
+         boolean literal, boolean exact, String notificationKey) {
         this.id = id;
         this.packageName = packageName == null ? "" : packageName;
         this.appName = appName == null ? "" : appName;
@@ -30,10 +36,12 @@ public final class Rule {
         this.literal = !exact && literal;
         this.phrase = phrase == null ? "" : normalizeLineEndings(phrase).trim();
         this.enabled = enabled;
+        this.notificationKey = exact && this.phrase.isEmpty() && !this.packageName.isEmpty()
+                && notificationKey != null && !notificationKey.isEmpty() ? notificationKey : null;
     }
 
     public Rule withEnabled(boolean value) {
-        return new Rule(id, packageName, appName, phrase, value, literal, exact);
+        return new Rule(id, packageName, appName, phrase, value, literal, exact, notificationKey);
     }
 
     static String normalizeLineEndings(String value) {

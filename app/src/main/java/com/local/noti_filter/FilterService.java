@@ -103,13 +103,15 @@ public final class FilterService extends NotificationListenerService {
     public static final class ActiveNotification {
         public final String packageName, appName, text;
         public final long postedAt;
-        ActiveNotification(String packageName, String appName, String text, long postedAt) {
+        final String key;
+        ActiveNotification(String packageName, String appName, String text, long postedAt, String key) {
             this.packageName = packageName;
             this.appName = appName;
             this.text = text;
             this.postedAt = postedAt;
+            this.key = key;
         }
-        public boolean canCreateRule() {
+        boolean hasText() {
             return !RuleExpression.isBlank(text);
         }
     }
@@ -134,10 +136,12 @@ public final class FilterService extends NotificationListenerService {
                 String original = notificationText(sbn.getNotification()).trim();
                 String visible = publicText(sbn.getNotification()).trim();
                 if (!sbn.getUser().equals(android.os.Process.myUserHandle())) label += " · 다른 프로필";
-                result.add(new ActiveNotification(pkg, label,
-                        original.isEmpty() ? visible : original, sbn.getPostTime()));
-                if (!original.isEmpty() && !visible.isEmpty() && !visible.equals(original)) {
-                    result.add(new ActiveNotification(pkg, label + " · 내용 숨김 표시", visible, sbn.getPostTime()));
+                boolean hasOriginal = !RuleExpression.isBlank(original);
+                result.add(new ActiveNotification(pkg, label, hasOriginal ? original : visible,
+                        sbn.getPostTime(), sbn.getKey()));
+                if (hasOriginal && !RuleExpression.isBlank(visible) && !visible.equals(original)) {
+                    result.add(new ActiveNotification(pkg, label + " · 내용 숨김 표시", visible,
+                            sbn.getPostTime(), sbn.getKey()));
                 }
             }
             result.sort((a, b) -> Long.compare(b.postedAt, a.postedAt));
@@ -172,10 +176,15 @@ public final class FilterService extends NotificationListenerService {
     private static String matchingText(List<Rule> rules, StatusBarNotification sbn) {
         return matchingText(rules, sbn.getPackageName(),
                 notificationText(sbn.getNotification()),
-                publicText(sbn.getNotification()));
+                publicText(sbn.getNotification()), sbn.getKey());
     }
 
     static String matchingText(List<Rule> rules, String sourcePackage, String original, String visible) {
+        return matchingText(rules, sourcePackage, original, visible, null);
+    }
+
+    static String matchingText(List<Rule> rules, String sourcePackage, String original, String visible,
+                               String notificationKey) {
         boolean originalBlank = original == null || RuleExpression.isBlank(original);
         boolean visibleBlank = visible == null || RuleExpression.isBlank(visible);
         if (!originalBlank) {
@@ -185,8 +194,14 @@ public final class FilterService extends NotificationListenerService {
             return !visibleBlank && RuleMatcher.matchesNonExact(rules, sourcePackage, visible)
                     ? visible : null;
         }
-        return !visibleBlank && RuleMatcher.matches(rules, sourcePackage, visible)
-                ? visible : null;
+        if (!visibleBlank) return RuleMatcher.matches(rules, sourcePackage, visible) ? visible : null;
+        if (notificationKey != null) {
+            for (Rule rule : rules) {
+                if (rule.enabled && rule.packageName.equals(sourcePackage)
+                        && notificationKey.equals(rule.notificationKey)) return "";
+            }
+        }
+        return null;
     }
 
     private static String publicText(Notification notification) {

@@ -753,7 +753,8 @@ public final class MainActivity extends Activity {
         names.setGravity(Gravity.CENTER_VERTICAL);
         names.setBackground(pressable(0x222563EB, Color.TRANSPARENT, 8));
         names.setFocusable(true);
-        String ruleSummary = rule.exact ? "정확히 일치: " + rule.phrase : "포함 문구: " + rule.phrase;
+        String ruleSummary = rule.notificationKey != null ? "문구 없는 동일 알림"
+                : rule.exact ? "정확히 일치: " + rule.phrase : "포함 문구: " + rule.phrase;
         names.setContentDescription("규칙 수정: " + rule.appName + " " + ruleSummary);
         names.setOnClickListener(v -> editRule.run());
         if (rule.exact) {
@@ -763,7 +764,8 @@ public final class MainActivity extends Activity {
             bp.bottomMargin = dp(4);
             names.addView(badge, bp);
         }
-        TextView phrase = text(rule.exact ? rule.phrase : "포함 문구: " + rule.phrase, 15, INK, false);
+        TextView phrase = text(rule.exact && rule.notificationKey == null ? rule.phrase : ruleSummary,
+                15, INK, false);
         LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-1, -2);
         pp.topMargin = dp(2);
         names.addView(phrase, pp);
@@ -805,7 +807,8 @@ public final class MainActivity extends Activity {
     private void showDeleteRuleDialog(Rule rule) {
         if (deleteRuleDialog != null || isFinishing() || isDestroyed()) return;
         String appLabel = rule.packageName.isEmpty() ? "모든 앱" : (rule.appName.isEmpty() ? rule.packageName : rule.appName);
-        String summary = rule.exact ? "정확히 일치: " + rule.phrase : "포함 문구: " + rule.phrase;
+        String summary = rule.notificationKey != null ? "문구 없는 동일 알림"
+                : rule.exact ? "정확히 일치: " + rule.phrase : "포함 문구: " + rule.phrase;
         AlertDialog confirmation = ModernDialog.builder(this, "규칙 삭제", null)
                 .setView(ModernDialog.messageBody(this,
                         "이 차단 규칙을 삭제하시겠습니까?\n\n대상 앱: " + appLabel + "\n조건: " + summary))
@@ -918,7 +921,8 @@ public final class MainActivity extends Activity {
             if (exactMode) {
                 phrase.setSingleLine(false);
                 phrase.setMaxLines(4);
-                phrase.setHint("예: 정확히 일치할 알림 전체 문구");
+                phrase.setHint(editing && original.notificationKey != null ? "문구 없는 동일 알림"
+                        : "예: 정확히 일치할 알림 전체 문구");
                 phraseLabel.setText("일치 문구 · 알림 전체 내용과 정확히 비교");
             } else if (initialLiteral) {
                 phrase.setSingleLine(false);
@@ -988,7 +992,9 @@ public final class MainActivity extends Activity {
                 boolean exactMode = exactCheck.isChecked();
                 boolean literalMode = !exactMode && initialLiteral;
                 String value = phrase.getText().toString().trim();
-                if (TextUtils.isEmpty(value)) {
+                String notificationKey = editing && exactMode && RuleExpression.isBlank(value)
+                        && original.packageName.equals(selected[0].packageName) ? original.notificationKey : null;
+                if (RuleExpression.isBlank(value) && notificationKey == null) {
                     phrase.setError("문구를 입력해 주세요");
                     return;
                 }
@@ -1010,7 +1016,8 @@ public final class MainActivity extends Activity {
                         return;
                     }
                     savedRule = new Rule(original.id, selected[0].packageName, selected[0].label,
-                            value, rules.get(index).enabled, literalMode, exactMode);
+                            notificationKey == null ? value : "", rules.get(index).enabled,
+                            literalMode, exactMode, notificationKey);
                     rules.set(index, savedRule);
                 } else {
                     savedRule = new Rule(System.currentTimeMillis(), selected[0].packageName,
@@ -1072,8 +1079,6 @@ public final class MainActivity extends Activity {
             @Override public int getCount() { return items.size(); }
             @Override public FilterService.ActiveNotification getItem(int position) { return items.get(position); }
             @Override public long getItemId(int position) { return position; }
-            @Override public boolean areAllItemsEnabled() { return false; }
-            @Override public boolean isEnabled(int position) { return getItem(position).canCreateRule(); }
             @Override public View getView(int position, View recycled, android.view.ViewGroup parent) {
                 FilterService.ActiveNotification item = getItem(position);
                 LinearLayout row = new LinearLayout(MainActivity.this);
@@ -1085,11 +1090,10 @@ public final class MainActivity extends Activity {
                 row.addView(text(item.appName, 15, ModernDialog.INK, true), new LinearLayout.LayoutParams(-1, -2));
                 TextView pkgView = text(item.packageName, 11, ModernDialog.HINT, false);
                 row.addView(pkgView, new LinearLayout.LayoutParams(-1, -2));
-                TextView body = text(!item.canCreateRule() ? "문구가 없어 규칙을 만들 수 없는 알림입니다." : item.text,
-                        13, !item.canCreateRule() ? ModernDialog.MUTED : ModernDialog.BODY, false);
+                TextView body = text(item.hasText() ? item.text : "문구 없음 · 정확히 같은 알람만 제거",
+                        13, item.hasText() ? ModernDialog.BODY : ModernDialog.MUTED, false);
                 body.setPadding(0, dp(6), 0, 0);
                 row.addView(body, new LinearLayout.LayoutParams(-1, -2));
-                row.setAlpha(item.canCreateRule() ? 1f : 0.6f);
                 return row;
             }
         };
@@ -1144,15 +1148,17 @@ public final class MainActivity extends Activity {
         };
         list.setOnItemClickListener((parent, view, position, id) -> {
             if (activeNotificationsDialog != dialog || !dialog.isShowing() || !list.isEnabled()
-                    || position < 0 || position >= items.size() || !adapter.isEnabled(position)) return;
+                    || position < 0 || position >= items.size()) return;
             FilterService.ActiveNotification item = items.get(position);
             list.setEnabled(false);
             List<Rule> rules = store.load();
             long nextId = System.currentTimeMillis();
             for (Rule rule : rules) if (rule.id >= nextId) nextId = rule.id + 1;
+            boolean hasText = item.hasText();
+            if (!hasText) exactCheck.setChecked(true);
             boolean exactOnly = exactCheck.isChecked();
-            Rule saved = new Rule(nextId, item.packageName, item.appName, item.text,
-                    true, !exactOnly, exactOnly);
+            Rule saved = new Rule(nextId, item.packageName, item.appName, hasText ? item.text : "",
+                    true, !exactOnly, exactOnly, hasText ? null : item.key);
             rules.add(saved);
             store.save(rules);
             expandedApps.add(saved.packageName);

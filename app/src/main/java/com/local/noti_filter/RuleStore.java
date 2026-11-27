@@ -84,12 +84,14 @@ public final class RuleStore {
                     || !(item.get("phrase") instanceof String)
                     || !(item.get("enabled") instanceof Boolean)
                     || (item.has("literal") && !(item.get("literal") instanceof Boolean))
-                    || (item.has("exact") && !(item.get("exact") instanceof Boolean))) {
+                    || (item.has("exact") && !(item.get("exact") instanceof Boolean))
+                    || (item.has("notificationKey") && !(item.get("notificationKey") instanceof String))) {
                 throw new JSONException("Invalid rule scope, phrase or enabled value");
             }
             result.add(new Rule(item.getLong("id"), item.getString("package"),
                     item.optString("app"), item.getString("phrase"), item.getBoolean("enabled"),
-                    item.optBoolean("literal", false), item.optBoolean("exact", false)));
+                    item.optBoolean("literal", false), item.optBoolean("exact", false),
+                    item.optString("notificationKey", null)));
         }
         return result;
     }
@@ -110,6 +112,7 @@ public final class RuleStore {
                 item.put("enabled", rule.enabled);
                 item.put("literal", rule.literal);
                 item.put("exact", rule.exact);
+                if (rule.notificationKey != null) item.put("notificationKey", rule.notificationKey);
                 array.put(item);
             } catch (JSONException impossible) { throw new IllegalStateException(impossible); }
         }
