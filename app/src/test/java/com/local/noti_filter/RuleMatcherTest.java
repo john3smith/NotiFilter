@@ -189,6 +189,24 @@ public class RuleMatcherTest {
                 new Rule(2, kakaoPkg, "카카오톡", "내용 숨김", true, true, false));
         assertEquals("내용 숨김", FilterService.matchingText(nonExact, kakaoPkg, senderAndMessage, "내용 숨김"));
     }
+    @Test public void emptyExactRuleRequiresSameNotificationKeyAndNoAvailableText() {
+        Rule rule = new Rule(1, "app", "App", "", true, false, true, "same-key");
+        List<Rule> rules = Collections.singletonList(rule);
+        assertEquals("", FilterService.matchingText(rules, "app", "", "", "same-key"));
+        assertEquals("", FilterService.matchingText(rules, "app", " \t", "\u00a0", "same-key"));
+        assertNull(FilterService.matchingText(rules, "app", "", "", "other-key"));
+        assertNull(FilterService.matchingText(rules, "other", "", "", "same-key"));
+        assertNull(FilterService.matchingText(rules, "app", "original", "", "same-key"));
+        assertNull(FilterService.matchingText(rules, "app", "", "public", "same-key"));
+        assertNull(FilterService.matchingText(
+                Collections.singletonList(rule.withEnabled(false)), "app", "", "", "same-key"));
+        assertEquals("", FilterService.matchingText(
+                Collections.singletonList(rule.withEnabled(false).withEnabled(true)), "app", "", "", "same-key"));
+        assertNull(FilterService.matchingText(
+                Collections.singletonList(new Rule(1, "app", "App", "", true, false, true)),
+                "app", "", "", "same-key"));
+    }
+
     @Test public void withEnabledPreservesExactMode() {
         Rule exact = new Rule(1, "app", "App", "정확 문구", true, false, true).withEnabled(false).withEnabled(true);
         assertTrue(exact.exact);
