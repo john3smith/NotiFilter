@@ -207,6 +207,21 @@ public class RuleMatcherTest {
                 "app", "", "", "same-key"));
     }
 
+    @Test public void manualBlankRuleMatchesOnlyBlankNotificationsInItsScope() {
+        Rule rule = new Rule(1, "app", "App", "", true, false, true, null, true);
+        List<Rule> rules = Collections.singletonList(rule);
+        assertEquals("", FilterService.matchingText(rules, "app", "", " ", "first"));
+        assertEquals("", FilterService.matchingText(rules, "app", "", "", "second"));
+        assertNull(FilterService.matchingText(rules, "other", "", "", "first"));
+        assertNull(FilterService.matchingText(rules, "app", "title", "", "first"));
+        assertNull(FilterService.matchingText(rules, "app", "", "public title", "first"));
+        assertNull(FilterService.matchingText(Collections.singletonList(rule.withEnabled(false)),
+                "app", "", "", "first"));
+        assertEquals("", FilterService.matchingText(
+                Collections.singletonList(new Rule(2, "", "All", "", true, false, true, null, true)),
+                "other", "", "", "first"));
+    }
+
     @Test public void withEnabledPreservesExactMode() {
         Rule exact = new Rule(1, "app", "App", "정확 문구", true, false, true).withEnabled(false).withEnabled(true);
         assertTrue(exact.exact);

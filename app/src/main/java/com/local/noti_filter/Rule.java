@@ -11,6 +11,7 @@ public final class Rule {
     public final boolean literal;
     public final boolean exact;
     final String notificationKey;
+    final boolean matchBlank;
     // Bound to this immutable rule's lifetime, independent of shared-cache eviction.
     private volatile RuleExpression compiledExpression;
 
@@ -29,6 +30,11 @@ public final class Rule {
 
     Rule(long id, String packageName, String appName, String phrase, boolean enabled,
          boolean literal, boolean exact, String notificationKey) {
+        this(id, packageName, appName, phrase, enabled, literal, exact, notificationKey, false);
+    }
+
+    Rule(long id, String packageName, String appName, String phrase, boolean enabled,
+         boolean literal, boolean exact, String notificationKey, boolean matchBlank) {
         this.id = id;
         this.packageName = packageName == null ? "" : packageName;
         this.appName = appName == null ? "" : appName;
@@ -38,10 +44,18 @@ public final class Rule {
         this.enabled = enabled;
         this.notificationKey = exact && this.phrase.isEmpty() && !this.packageName.isEmpty()
                 && notificationKey != null && !notificationKey.isEmpty() ? notificationKey : null;
+        this.matchBlank = exact && this.phrase.isEmpty() && (notificationKey == null
+                ? matchBlank : this.notificationKey != null);
     }
 
     public Rule withEnabled(boolean value) {
-        return new Rule(id, packageName, appName, phrase, value, literal, exact, notificationKey);
+        return new Rule(id, packageName, appName, phrase, value, literal, exact, notificationKey, matchBlank);
+    }
+
+    boolean matchesBlankNotification(String sourcePackage, String key) {
+        return enabled && matchBlank && sourcePackage != null
+                && (packageName.isEmpty() || packageName.equals(sourcePackage))
+                && (notificationKey == null || notificationKey.equals(key));
     }
 
     static String normalizeLineEndings(String value) {
